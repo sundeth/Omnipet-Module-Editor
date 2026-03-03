@@ -1,0 +1,12 @@
+{
+  "ServerUrls": {
+    "Development": "http://localhost:8000",
+    "Staging": "https://dev.omnipet.app.br",
+    "Production": "https://omnipet.app.br"
+  },
+  "Settings": {
+    "CodeExpirationMinutes": 5,
+    "MaxRetryAttempts": 3,
+    "TimeoutSeconds": 30
+  }
+}

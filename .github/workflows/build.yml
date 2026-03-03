@@ -2,9 +2,9 @@ name: Build and Release
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, develop ]
   pull_request:
-    branches: [ main ]
+    branches: [ main, develop ]
   release:
     types: [ created ]
 
@@ -14,13 +14,13 @@ jobs:
     
     steps:
     - name: Checkout code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       
     - name: Setup .NET Framework
-      uses: microsoft/setup-msbuild@v1.1
+      uses: microsoft/setup-msbuild@v2
       
     - name: Setup NuGet
-      uses: nuget/setup-nuget@v1
+      uses: nuget/setup-nuget@v2
       
     - name: Restore NuGet packages
       run: nuget restore OmnipetModuleEditor/OmnipetModuleEditor.csproj
@@ -35,7 +35,7 @@ jobs:
       shell: pwsh
       
     - name: Upload build artifacts
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: OmnipetModuleEditor-Build
         path: ./artifacts/
@@ -49,11 +49,8 @@ jobs:
       
     - name: Upload Release Asset
       if: github.event_name == 'release'
-      uses: actions/upload-release-asset@v1
+      uses: softprops/action-gh-release@v1
+      with:
+        files: ./OmnipetModuleEditor-${{ github.ref_name }}.zip
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ github.event.release.upload_url }}
-        asset_path: ./OmnipetModuleEditor-${{ github.ref_name }}.zip
-        asset_name: OmnipetModuleEditor-${{ github.ref_name }}.zip
-        asset_content_type: application/zip
