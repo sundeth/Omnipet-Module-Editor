@@ -1,0 +1,448 @@
+﻿using OmnipetModuleEditor.controls;
+using OmnipetModuleEditor.OmniNet;
+using OmnipetModuleEditor.Tabs;
+using System;
+using System.IO;
+using System.Reflection;
+using System.Threading.Tasks;
+using System.Windows.Forms;
+
+namespace OmnipetModuleEditor
+{
+    /// <summary>
+    /// Main form for editing a module, including tabs for module, pets, battle, and items.
+    /// </summary>
+    public partial class ModuleEditorForm : Form
+    {
+        private string currentPath;
+        private Models.Module currentModule;
+        private Form selectorForm;
+
+        /// <summary>
+        /// Initializes the module editor form.
+        /// </summary>
+        /// <param name="currentPath">Path to the module folder.</param>
+        /// <param name="selectorForm">Reference to the selector form for returning after close.</param>
+        public ModuleEditorForm(string currentPath, Form selectorForm)
+        {
+            this.currentPath = currentPath;
+            this.selectorForm = selectorForm;
+            InitializeComponent();
+
+            var version = Assembly.GetExecutingAssembly().GetName().Version;
+            this.Text = $"Omnipet Module Editor v{version}";
+
+            // Block resizing
+            this.FormBorderStyle = FormBorderStyle.FixedDialog;
+            this.MaximizeBox = false;
+            this.MinimizeBox = false;
+            this.SizeGripStyle = SizeGripStyle.Hide;
+
+            this.StartPosition = FormStartPosition.CenterScreen;
+
+            LoadOrCreateModule();
+
+            this.FormClosed += ModuleEditorForm_FormClosed;
+
+            AddTabs();
+            
+            // Auto-login check (this will update publish button internally)
+            TryAutoLogin();
+            
+            // NOTE: UpdatePublishButton() is now called by TryAutoLogin(), no need to call twice
+        }
+
+        // =========================
+        // Initialization & Events
+        // =========================
+
+        /// <summary>
+        /// Handles the form closed event to show the selector form again.
+        /// </summary>
+        private void ModuleEditorForm_FormClosed(object sender, FormClosedEventArgs e)
+        {
+            if (selectorForm != null)
+                selectorForm.Show();
+        }
+
+        // =========================
+        // Module Loading & Saving
+        // =========================
+
+        /// <summary>
+        /// Loads the module from disk or creates a new one if not found.
+        /// </summary>
+        private void LoadOrCreateModule()
+        {
+            string moduleFile = Path.Combine(currentPath, "module.json");
+            if (File.Exists(moduleFile))
+            {
+                try
+                {
+                    string json = File.ReadAllText(moduleFile);
+                    currentModule = System.Text.Json.JsonSerializer.Deserialize<Models.Module>(json);
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show(
+                        string.Format(Properties.Resources.ErrorLoadingModule, ex.Message),
+                        Properties.Resources.Error,
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Error);
+                    currentModule = new Models.Module();
+                }
+            }
+            else
+            {
+                currentModule = new Models.Module();
+            }
+        }
+
+        /// <summary>
+        /// Saves all tabs by calling their Save method if available.
+        /// </summary>
+        private void buttonSave_Click(object sender, EventArgs e)
+        {
+            foreach (TabPage tabPage in tabControlMain.TabPages)
+            {
+                if (tabPage.Controls.Count > 0)
+                {
+                    var control = tabPage.Controls[0];
+                    var saveMethod = control.GetType().GetMethod("Save", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic);
+                    if (saveMethod != null)
+                    {
+                        saveMethod.Invoke(control, null);
+                    }
+                }
+            }
+            MessageBox.Show(Properties.Resources.ModuleSaved, Properties.Resources.Save, MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+
+        /// <summary>
+        /// Closes the editor form without saving.
+        /// </summary>
+        private void buttonCancel_Click(object sender, EventArgs e)
+        {
+            this.Close();
+        }
+
+        // =========================
+        // Tab Management
+        // =========================
+
+        /// <summary>
+        /// Adds all main tabs (Module, Pet, Battle, Item, Quest/Event) to the tab control.
+        /// </summary>
+        private void AddTabs()
+        {
+            tabControlMain.TabPages.Clear();
+
+            var moduleTabControl = new ModuleTab();
+            moduleTabControl.Dock = DockStyle.Fill;
+            moduleTabControl.SetModulePath(currentPath);
+            moduleTabControl.LoadFromModule(currentModule);
+
+            var moduleTab = new TabPage(Properties.Resources.TabModule);
+            moduleTab.Controls.Add(moduleTabControl);
+            tabControlMain.TabPages.Add(moduleTab);
+
+            var petControl = new PetTab();
+            petControl.Dock = DockStyle.Fill;
+            petControl.SetModule(currentPath, currentModule);
+
+            var petTab = new TabPage(Properties.Resources.TabPet);
+            petTab.Controls.Add(petControl);
+            tabControlMain.TabPages.Add(petTab);
+
+            var battleTabControl = new BattleTab();
+            battleTabControl.Dock = DockStyle.Fill;
+            battleTabControl.SetModule(currentPath, currentModule);
+
+            var battleTab = new TabPage(Properties.Resources.TabBattle);
+            battleTab.Controls.Add(battleTabControl);
+            tabControlMain.TabPages.Add(battleTab);
+
+            var itemControl = new ItemTab();
+            itemControl.Dock = DockStyle.Fill;
+            itemControl.SetModule(currentPath, currentModule);
+
+            var itemTab = new TabPage(Properties.Resources.TabItem);
+            itemTab.Controls.Add(itemControl);
+            tabControlMain.TabPages.Add(itemTab);
+
+            var questEventControl = new QuestEventTab();
+            questEventControl.Dock = DockStyle.Fill;
+            questEventControl.SetModule(currentPath, currentModule);
+
+            var questEventTab = new TabPage("Quests/Events");
+            questEventTab.Controls.Add(questEventControl);
+            tabControlMain.TabPages.Add(questEventTab);
+        }
+
+        private void buttonGenerateDoc_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                HTMLGenerator.GenerateDocumentation(currentPath);
+                MessageBox.Show("The module's documents were generated", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Error while generating the documentation:\n" + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        // =========================
+        // OmniNet Integration
+        // =========================
+
+        /// <summary>
+        /// Attempts to auto-login using saved session data.
+        /// </summary>
+        private async void TryAutoLogin()
+        {
+            var config = OmniNetConfig.Instance;
+            
+            System.Diagnostics.Debug.WriteLine("[ModuleEditorForm] TryAutoLogin called");
+            System.Diagnostics.Debug.WriteLine($"[ModuleEditorForm] IsLoggedIn: {config.IsLoggedIn}");
+            System.Diagnostics.Debug.WriteLine($"[ModuleEditorForm] SecretKey exists: {!string.IsNullOrEmpty(config.SecretKey)}");
+            System.Diagnostics.Debug.WriteLine($"[ModuleEditorForm] DeviceId: {config.DeviceId}");
+            System.Diagnostics.Debug.WriteLine($"[ModuleEditorForm] Nickname: {config.Nickname}");
+            
+            if (!config.IsLoggedIn)
+            {
+                System.Diagnostics.Debug.WriteLine("[ModuleEditorForm] Not logged in, skipping auto-login");
+                return;
+            }
+
+            try
+            {
+                using (var client = new OmniNetApiClient())
+                {
+                    System.Diagnostics.Debug.WriteLine($"[ModuleEditorForm] Validating session with SecretKey");
+                    var response = await client.ValidateSecretKeyAsync(config.SecretKey);
+                    
+                    // Only clear session if authentication explicitly failed (not for network errors)
+                    if (!response.Success)
+                    {
+                        // Check if it's an authentication error (401, 403, invalid credentials)
+                        // vs a network/server error (timeout, 500, etc)
+                        if (response.Data == null && !string.IsNullOrEmpty(response.ErrorMessage))
+                        {
+                            // If we got an error message but no data, it might be an auth error
+                            var errorLower = response.ErrorMessage.ToLower();
+                            if (errorLower.Contains("unauthorized") || 
+                                errorLower.Contains("invalid") || 
+                                errorLower.Contains("expired") ||
+                                errorLower.Contains("forbidden"))
+                            {
+                                System.Diagnostics.Debug.WriteLine("[ModuleEditorForm] Authentication failed - clearing session");
+                                config.ClearSession();
+                            }
+                            else
+                            {
+                                System.Diagnostics.Debug.WriteLine("[ModuleEditorForm] Network/server error - preserving session");
+                            }
+                        }
+                        else
+                        {
+                            System.Diagnostics.Debug.WriteLine("[ModuleEditorForm] Unknown error - preserving session for retry");
+                        }
+                    }
+                    else if (response.Data == null)
+                    {
+                        // Success but no data - this is unusual, preserve session
+                        System.Diagnostics.Debug.WriteLine("[ModuleEditorForm] Success but no data - preserving session");
+                    }
+                    else
+                    {
+                        System.Diagnostics.Debug.WriteLine("[ModuleEditorForm] Session validation succeeded");
+                        // Update nickname/email if provided in response
+                        if (!string.IsNullOrEmpty(response.Data.nickname))
+                            config.Nickname = response.Data.nickname;
+                        if (!string.IsNullOrEmpty(response.Data.email))
+                            config.UserEmail = response.Data.email;
+                        config.SaveSession();
+                    }
+                }
+            }
+            catch (System.Net.Http.HttpRequestException ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[ModuleEditorForm] Network error during auto-login: {ex.Message}");
+                // Network error - preserve session for retry later
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[ModuleEditorForm] Auto-login exception: {ex.Message}");
+                // Unknown error - preserve session unless it's clearly an auth issue
+            }
+
+            UpdatePublishButton();
+        }
+
+        /// <summary>
+        /// Updates the publish button text based on module status.
+        /// </summary>
+        private async void UpdatePublishButton()
+        {
+            var config = OmniNetConfig.Instance;
+            
+            if (!config.IsLoggedIn)
+            {
+                buttonPublish.Text = "Publish";
+                buttonPublish.Enabled = true;
+                return;
+            }
+
+            try
+            {
+                using (var client = new OmniNetApiClient())
+                {
+                    var response = await client.GetModuleStatusAsync(currentModule?.Name ?? "", config.SecretKey);
+                    
+                    if (response.Success && response.Data.success)
+                    {
+                        switch (response.Data.status)
+                        {
+                            case "published":
+                                buttonPublish.Text = "Unpublish";
+                                break;
+                            case "unpublished":
+                            case "not_found":
+                            default:
+                                buttonPublish.Text = "Publish";
+                                break;
+                        }
+                    }
+                    else
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[ModuleEditorForm] GetModuleStatus failed: {response.ErrorMessage}");
+                        buttonPublish.Text = "Publish";
+                    }
+                }
+            }
+            catch (System.Net.Http.HttpRequestException ex)
+            {
+                // Network errors - likely OmniNet is offline
+                System.Diagnostics.Debug.WriteLine($"[ModuleEditorForm] Network error checking module status: {ex.Message}");
+                buttonPublish.Text = "Publish";
+            }
+            catch (Exception ex)
+            {
+                // Log unexpected errors but don't crash the UI
+                System.Diagnostics.Debug.WriteLine($"[ModuleEditorForm] Unexpected error in UpdatePublishButton: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"[ModuleEditorForm] Stack trace: {ex.StackTrace}");
+                buttonPublish.Text = "Publish";
+            }
+        }
+
+        /// <summary>
+        /// Opens the account management dialog.
+        /// </summary>
+        private void buttonAccount_Click(object sender, EventArgs e)
+        {
+            var config = OmniNetConfig.Instance;
+            var wasLoggedInBefore = config.IsLoggedIn;
+            
+            System.Diagnostics.Debug.WriteLine($"[ModuleEditorForm] Opening AccountForm - Currently logged in: {wasLoggedInBefore}");
+            
+            using (var form = new AccountForm())
+            {
+                var result = form.ShowDialog(this);
+                
+                // Check current state after dialog closes
+                var isLoggedInAfter = config.IsLoggedIn;
+                System.Diagnostics.Debug.WriteLine($"[ModuleEditorForm] AccountForm closed with result: {result}");
+                System.Diagnostics.Debug.WriteLine($"[ModuleEditorForm] Currently logged in: {isLoggedInAfter}");
+                System.Diagnostics.Debug.WriteLine($"[ModuleEditorForm] SecretKey exists: {!string.IsNullOrEmpty(config.SecretKey)}");
+                System.Diagnostics.Debug.WriteLine($"[ModuleEditorForm] Nickname: {config.Nickname}");
+                
+                // Only update if login state changed to avoid unnecessary network calls
+                if (wasLoggedInBefore != isLoggedInAfter)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[ModuleEditorForm] Login state changed, updating publish button");
+                    UpdatePublishButton();
+                }
+                else if (isLoggedInAfter)
+                {
+                    // Still logged in, but might need to refresh button state
+                    // (e.g., if user toggled between published/unpublished in another session)
+                    System.Diagnostics.Debug.WriteLine($"[ModuleEditorForm] Still logged in, refreshing publish button state");
+                    UpdatePublishButton();
+                }
+            }
+        }
+
+        /// <summary>
+        /// Handles publish/unpublish button click.
+        /// </summary>
+        private async void buttonPublish_Click(object sender, EventArgs e)
+        {
+            var config = OmniNetConfig.Instance;
+            
+            if (!config.IsLoggedIn)
+            {
+                MessageBox.Show("You must be logged in to publish modules.\n\nClick the Account button to login or create an account.",
+                    "Login Required", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            // First, save the module
+            buttonSave_Click(sender, e);
+            
+            // Reload module data
+            LoadOrCreateModule();
+
+            if (string.IsNullOrWhiteSpace(currentModule?.Name))
+            {
+                MessageBox.Show("The module must have a name before publishing.", "Invalid Module", 
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            if (buttonPublish.Text == "Unpublish")
+            {
+                var confirmResult = MessageBox.Show(
+                    "Are you sure you want to unpublish this module?\n\nIt will no longer be available for download.",
+                    "Confirm Unpublish",
+                    MessageBoxButtons.YesNo,
+                    MessageBoxIcon.Warning);
+
+                if (confirmResult != DialogResult.Yes)
+                    return;
+
+                try
+                {
+                    using (var client = new OmniNetApiClient())
+                    {
+                        var response = await client.UnpublishModuleAsync(currentModule.Name, config.SecretKey);
+                        
+                        if (response.Success && response.Data.success)
+                        {
+                            MessageBox.Show("Module unpublished successfully.", "Success",
+                                MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        }
+                        else
+                        {
+                            MessageBox.Show(response.ErrorMessage ?? response.Data?.message ?? "Failed to unpublish module.",
+                                "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"Error: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
+            }
+            else
+            {
+                using (var form = new PublishModuleForm(currentPath, currentModule.Name, currentModule.Version))
+                {
+                    form.ShowDialog(this);
+                }
+            }
+
+            UpdatePublishButton();
+        }
+    }
+}

@@ -1,0 +1,59 @@
+name: Build and Release
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  release:
+    types: [ created ]
+
+jobs:
+  build:
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+      
+    - name: Setup .NET Framework
+      uses: microsoft/setup-msbuild@v1.1
+      
+    - name: Setup NuGet
+      uses: nuget/setup-nuget@v1
+      
+    - name: Restore NuGet packages
+      run: nuget restore OmnipetModuleEditor/OmnipetModuleEditor.csproj
+      
+    - name: Build solution
+      run: msbuild OmnipetModuleEditor/OmnipetModuleEditor.csproj /p:Configuration=Release /p:Platform="Any CPU"
+      
+    - name: Create artifacts directory
+      run: |
+        New-Item -ItemType Directory -Force -Path ./artifacts
+        Copy-Item -Path "./OmnipetModuleEditor/bin/Release/*" -Destination "./artifacts/" -Recurse
+      shell: pwsh
+      
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: OmnipetModuleEditor-Build
+        path: ./artifacts/
+        retention-days: 30
+        
+    - name: Zip Release
+      if: github.event_name == 'release'
+      run: |
+        Compress-Archive -Path "./artifacts/*" -DestinationPath "./OmnipetModuleEditor-${{ github.ref_name }}.zip"
+      shell: pwsh
+      
+    - name: Upload Release Asset
+      if: github.event_name == 'release'
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ github.event.release.upload_url }}
+        asset_path: ./OmnipetModuleEditor-${{ github.ref_name }}.zip
+        asset_name: OmnipetModuleEditor-${{ github.ref_name }}.zip
+        asset_content_type: application/zip
