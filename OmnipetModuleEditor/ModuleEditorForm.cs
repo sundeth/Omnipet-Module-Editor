@@ -192,6 +192,29 @@ namespace OmnipetModuleEditor
             }
         }
 
+        private void buttonOpenDoc_Click(object sender, EventArgs e)
+        {
+            if (string.IsNullOrEmpty(currentPath))
+                return;
+
+            string docPath = Path.Combine(currentPath, "documentation", "index.html");
+            if (File.Exists(docPath))
+            {
+                try
+                {
+                    System.Diagnostics.Process.Start(docPath);
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show("Error opening documentation:\n" + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
+            }
+            else
+            {
+                MessageBox.Show("Documentation not found. Please generate it first.", "Not Found", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+        }
+
         // =========================
         // OmniNet Integration
         // =========================

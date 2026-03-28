@@ -24,6 +24,7 @@ namespace OmnipetModuleEditor.Tabs
         private EnemyEditPanel enemyEditPanel;
         private BattleEnemy copiedEnemy = null;
         private Button btnFastEditor;
+        private Button btnUpdateAtkSprites;
         private PetSpritePanel spritePanel;
         private Panel selectedPanel = null;
         private BattleEnemy selectedEnemy = null;
@@ -39,6 +40,7 @@ namespace OmnipetModuleEditor.Tabs
             enemyListPanel.BtnPaste.Click += BtnPaste_Click;
             enemyListPanel.BtnAdd.Click += BtnAdd_Click;
             btnFastEditor.Click += BtnFastEditor_Click;
+            btnUpdateAtkSprites.Click += BtnUpdateAtkSprites_Click;
         }
 
         #region Initialization
@@ -86,6 +88,14 @@ namespace OmnipetModuleEditor.Tabs
                 Margin = new Padding(8, 16, 8, 8),
                 Anchor = AnchorStyles.Right
             };
+            btnUpdateAtkSprites = new Button
+            {
+                Text = "Update Atk Sprites",
+                Width = 140,
+                Height = 32,
+                Margin = new Padding(8, 16, 8, 8),
+                Anchor = AnchorStyles.Right
+            };
             var bottomPanel = new FlowLayoutPanel
             {
                 Dock = DockStyle.Bottom,
@@ -93,6 +103,7 @@ namespace OmnipetModuleEditor.Tabs
                 AutoSize = true
             };
             bottomPanel.Controls.Add(btnFastEditor);
+            bottomPanel.Controls.Add(btnUpdateAtkSprites);
 
             rightPanel.Controls.Add(enemyEditPanel);
             rightPanel.Controls.Add(spritePanel);
@@ -205,6 +216,7 @@ namespace OmnipetModuleEditor.Tabs
         private void PopulateEnemyPanel()
         {
             var scrollPos = enemyListPanel.PanelEnemyList.AutoScrollPosition;
+            enemyListPanel.PanelEnemyList.SuspendLayout();
             enemyListPanel.PanelEnemyList.Controls.Clear();
             int y = 0;
             foreach (var enemy in enemies)
@@ -213,6 +225,8 @@ namespace OmnipetModuleEditor.Tabs
                 enemyListPanel.PanelEnemyList.Controls.Add(enemyPanel);
                 y += 56;
             }
+            enemyListPanel.PanelEnemyList.AutoScrollMinSize = new Size(0, y);
+            enemyListPanel.PanelEnemyList.ResumeLayout(true);
             enemyListPanel.PanelEnemyList.AutoScrollPosition = new Point(-scrollPos.X, -scrollPos.Y);
         }
 
@@ -241,9 +255,10 @@ namespace OmnipetModuleEditor.Tabs
                 BorderStyle = BorderStyle.FixedSingle
             };
 
-            // Use new SpriteUtils system for loading enemy sprites with high definition support
-            bool moduleHighDefinitionSprites = module?.HighDefinitionSprites ?? false;
-            var sprite = SpriteUtils.LoadSingleSprite(enemy.Name, modulePath, module?.NameFormat ?? SpriteUtils.DefaultNameFormat, moduleHighDefinitionSprites);
+            // Use new SpriteUtils system for loading enemy sprites with format support
+            string primary = module?.PrimarySpriteFormat ?? "Color";
+            string secondary = module?.SecondarySpriteFormat ?? "HD";
+            var sprite = SpriteUtils.LoadSingleSprite(enemy.Name, modulePath, module?.NameFormat ?? SpriteUtils.DefaultNameFormat, primary, secondary);
             pb.Image = sprite;
 
             itemPanel.Controls.Add(pb);
@@ -369,6 +384,102 @@ namespace OmnipetModuleEditor.Tabs
             };
 
             fastEditor.ShowDialog();
+        }
+
+        private void BtnUpdateAtkSprites_Click(object sender, EventArgs e)
+        {
+            if (enemies == null || enemies.Count == 0)
+            {
+                MessageBox.Show("No enemies to update.", "Update Attack Sprites", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            // Load pets from monster.json
+            List<Pet> pets;
+            try
+            {
+                pets = PetUtils.LoadPetsFromJson(modulePath);
+            }
+            catch
+            {
+                MessageBox.Show("Could not load monster.json.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+
+            if (pets == null || pets.Count == 0)
+            {
+                MessageBox.Show("No pets found in monster.json.", "Update Attack Sprites", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            // Build a lookup by name for fast matching
+            var petLookup = new Dictionary<string, Pet>(StringComparer.OrdinalIgnoreCase);
+            foreach (var p in pets)
+            {
+                if (!string.IsNullOrEmpty(p.Name) && !petLookup.ContainsKey(p.Name))
+                    petLookup[p.Name] = p;
+            }
+
+            // Progress dialog
+            var progressForm = new Form
+            {
+                Text = "Update Attack Sprites",
+                Size = new Size(400, 130),
+                FormBorderStyle = FormBorderStyle.FixedDialog,
+                StartPosition = FormStartPosition.CenterParent,
+                MinimizeBox = false,
+                MaximizeBox = false,
+                ControlBox = false
+            };
+            var lblStatus = new Label
+            {
+                Text = "Updating...",
+                Location = new Point(12, 12),
+                AutoSize = true
+            };
+            var progressBar = new ProgressBar
+            {
+                Location = new Point(12, 40),
+                Size = new Size(360, 28),
+                Minimum = 0,
+                Maximum = enemies.Count,
+                Value = 0
+            };
+            progressForm.Controls.Add(lblStatus);
+            progressForm.Controls.Add(progressBar);
+
+            int updatedCount = 0;
+
+            progressForm.Shown += (s2, e2) =>
+            {
+                Application.DoEvents();
+                for (int i = 0; i < enemies.Count; i++)
+                {
+                    var enemy = enemies[i];
+                    if (!string.IsNullOrEmpty(enemy.Name) && petLookup.TryGetValue(enemy.Name, out var matchedPet))
+                    {
+                        enemy.AtkMain = matchedPet.AtkMain;
+                        enemy.AtkAlt = matchedPet.AtkAlt;
+                        enemy.AtkAlt2 = matchedPet.AtkAlt2;
+                        updatedCount++;
+                    }
+                    progressBar.Value = i + 1;
+                    lblStatus.Text = $"Processing {i + 1} of {enemies.Count}...";
+                    Application.DoEvents();
+                }
+                progressForm.Close();
+            };
+
+            progressForm.ShowDialog(this);
+
+            if (updatedCount > 0)
+            {
+                Save();
+                if (selectedEnemy != null)
+                    enemyEditPanel.LoadEnemy(selectedEnemy);
+            }
+
+            MessageBox.Show($"Updated {updatedCount} of {enemies.Count} enemies.", "Update Attack Sprites", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
 
         private void BtnRemove_Click(object sender, EventArgs e)
@@ -575,6 +686,7 @@ namespace OmnipetModuleEditor.Tabs
             private ComboBox CmbAtkAlt;
             private ComboBox CmbAtkAlt2;  // NEW: ATK Alt 2
             private Dictionary<int, Image> atkSprites = new Dictionary<int, Image>();
+            private Dictionary<int, Image> atkCritSprites = new Dictionary<int, Image>();
 
             public EnemyEditPanel()
             {
@@ -760,24 +872,28 @@ namespace OmnipetModuleEditor.Tabs
             public void LoadAtkSprites(string modulePath)
             {
                 this.atkSprites = PetUtils.LoadAtkSprites(modulePath);
+                this.atkCritSprites = PetUtils.LoadAtkCritSprites(modulePath);
             }
 
             public void PopulateAtkCombos()
             {
                 CmbAtkMain.Items.Clear();
                 CmbAtkAlt.Items.Clear();
-                CmbAtkAlt2.Items.Clear();  // NEW: Clear ATK Alt 2 combo
+                CmbAtkAlt2.Items.Clear();
                 CmbAtkMain.Items.Add(new AtkComboItem(0, null));
                 CmbAtkAlt.Items.Add(new AtkComboItem(0, null));
-                CmbAtkAlt2.Items.Add(new AtkComboItem(0, null));  // NEW: Add default item to ATK Alt 2
+                CmbAtkAlt2.Items.Add(new AtkComboItem(0, null));
                 
-                // Use all available attack sprites instead of hardcoding to 117
                 foreach (var kvp in atkSprites.OrderBy(x => x.Key))
                 {
                     var item = new AtkComboItem(kvp.Key, kvp.Value);
                     CmbAtkMain.Items.Add(item);
                     CmbAtkAlt.Items.Add(item);
-                    CmbAtkAlt2.Items.Add(item);  // NEW: Add to ATK Alt 2 combo
+                }
+
+                foreach (var kvp in atkCritSprites.OrderBy(x => x.Key))
+                {
+                    CmbAtkAlt2.Items.Add(new AtkComboItem(kvp.Key, kvp.Value));
                 }
             }
 

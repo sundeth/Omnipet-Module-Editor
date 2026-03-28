@@ -12,6 +12,7 @@
         private System.Windows.Forms.Button buttonSave;
         private System.Windows.Forms.Button buttonCancel;
         private System.Windows.Forms.Button buttonGenerateDoc;
+        private System.Windows.Forms.Button buttonOpenDoc;
         private System.Windows.Forms.Button buttonAccount;
         private System.Windows.Forms.Button buttonPublish;
 
@@ -41,6 +42,7 @@
             this.buttonSave = new System.Windows.Forms.Button();
             this.buttonCancel = new System.Windows.Forms.Button();
             this.buttonGenerateDoc = new System.Windows.Forms.Button();
+            this.buttonOpenDoc = new System.Windows.Forms.Button();
             this.buttonAccount = new System.Windows.Forms.Button();
             this.buttonPublish = new System.Windows.Forms.Button();
 
@@ -60,6 +62,7 @@
             // panelBottom
             // 
             this.panelBottom.Controls.Add(this.buttonGenerateDoc);
+            this.panelBottom.Controls.Add(this.buttonOpenDoc);
             this.panelBottom.Controls.Add(this.buttonAccount);
             this.panelBottom.Controls.Add(this.buttonPublish);
             this.panelBottom.Controls.Add(this.buttonSave);
@@ -82,6 +85,18 @@
             this.buttonGenerateDoc.Text = "Generate Documentation";
             this.buttonGenerateDoc.UseVisualStyleBackColor = true;
             this.buttonGenerateDoc.Click += new System.EventHandler(this.buttonGenerateDoc_Click);
+            // 
+            // buttonOpenDoc
+            // 
+            this.buttonOpenDoc.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
+            this.buttonOpenDoc.Location = new System.Drawing.Point(180, 12);
+            this.buttonOpenDoc.Margin = new System.Windows.Forms.Padding(2, 2, 2, 2);
+            this.buttonOpenDoc.Name = "buttonOpenDoc";
+            this.buttonOpenDoc.Size = new System.Drawing.Size(140, 24);
+            this.buttonOpenDoc.TabIndex = 5;
+            this.buttonOpenDoc.Text = "Open Documentation";
+            this.buttonOpenDoc.UseVisualStyleBackColor = true;
+            this.buttonOpenDoc.Click += new System.EventHandler(this.buttonOpenDoc_Click);
             // 
             // buttonAccount
             // 

@@ -39,8 +39,12 @@ namespace OmnipetModuleEditor.docgenerators
                     // Adventure Style - NEW
                     .Replace("#MODULEADVENTURESTYLECLASS", !string.IsNullOrWhiteSpace(module?.AdventureStyle) ? "" : "boolean-false")
                     .Replace("#MODULEADVENTURESTYLE", module?.AdventureStyle ?? "Area Selection")
-                    .Replace("#MODULEHIGHDEFINITIONSPRITESCLASS", module?.HighDefinitionSprites == true ? "boolean-true" : "boolean-false")
-                    .Replace("#MODULEHIGHDEFINITIONSPRITES", module?.HighDefinitionSprites == true ? "Yes" : "No")
+                    .Replace("#MODULEPRIMARYSPRITEFORMAT", module?.PrimarySpriteFormat ?? "Color")
+                    .Replace("#MODULESECONDARYSPRITEFORMAT", module?.SecondarySpriteFormat ?? "HD")
+                    .Replace("#MODULEENABLESPECIALATTACKSPRITECLASS", module?.EnableSpecialAttackSprite == true ? "boolean-true" : "boolean-false")
+                    .Replace("#MODULEENABLESPECIALATTACKSPRITE", module?.EnableSpecialAttackSprite == true ? "Yes" : "No")
+                    .Replace("#MODULECOUNTEVOLUTIONWHILESLEEPINGCLASS", module?.CountEvolutionWhileSleeping == true ? "boolean-true" : "boolean-false")
+                    .Replace("#MODULECOUNTEVOLUTIONWHILESLEEPING", module?.CountEvolutionWhileSleeping == true ? "Yes" : "No")
                     .Replace("#MODULEVISIBLESTATSCLASS", !string.IsNullOrWhiteSpace(module?.VisibleStats) ? "" : "boolean-false")
                     .Replace("#MODULEVISIBLESTATS", GetVisibleStatsDisplayValue(module?.VisibleStats))
                     .Replace("#MODULECAREMEATWEIGHTGAINCLASS", GetIntegerCssClass(module?.CareMeatWeightGain))
@@ -94,7 +98,28 @@ namespace OmnipetModuleEditor.docgenerators
                     .Replace("#MODULECAREFIXED4HEARTSCLASS", (module?.CareFixed4Hearts ?? true) ? "boolean-true" : "boolean-false")
                     .Replace("#MODULECAREFIXED4HEARTS", (module?.CareFixed4Hearts ?? true) ? "Yes" : "No")
 
+                    // Care 99g Effect - NEW
+                    .Replace("#MODULECARE99GEFFECTCLASS", !string.IsNullOrWhiteSpace(module?.Care99gEffect) && module?.Care99gEffect != "Nothing" ? "" : "boolean-false")
+                    .Replace("#MODULECARE99GEFFECT", module?.Care99gEffect ?? "Skull")
+
+                    // Care Poop Sickness Count - NEW
+                    .Replace("#MODULECAREPOOPSICKNESSCOUNTCLASS", GetIntegerCssClass(module?.CarePoopSicknessCount))
+                    .Replace("#MODULECAREPOOPSICKNESSCOUNT", GetIntegerDisplayValue(module?.CarePoopSicknessCount))
+
+                    // Care Poop Sickness Effect - NEW
+                    .Replace("#MODULECAREPOOPSICKNESSEFFECT", module?.CarePoopSicknessEffect ?? "Skull")
+
+                    // Care Block Actions When Sleeping - NEW
+                    .Replace("#MODULECAREBLOCKACTIONSSLEEPINGCLASS", module?.CareBlockActionsWhenSleeping == true ? "boolean-true" : "boolean-false")
+                    .Replace("#MODULECAREBLOCKACTIONSSLEEPING", module?.CareBlockActionsWhenSleeping == true ? "Yes" : "No")
+
+                    // Care Can Battle While Sick - NEW
+                    .Replace("#MODULECARECANBATTLEWHILESICKCLASS", module?.CareCanBattleWhileSick == true ? "boolean-true" : "boolean-false")
+                    .Replace("#MODULECARECANBATTLEWHILESICK", module?.CareCanBattleWhileSick == true ? "Yes" : "No")
+
                     // Training
+                    .Replace("#MODULETRAININGEFFORTGAINCLASS", GetIntegerCssClass(module?.TrainingEffortGain))
+                    .Replace("#MODULETRAININGEFFORTGAIN", GetIntegerDisplayValue(module?.TrainingEffortGain))
                     .Replace("#MODULETRAININGSTRENGTHGAINWINCLASS", GetIntegerCssClass(module?.TrainingStrenghGainWin))
                     .Replace("#MODULETRAININGSTRENGTHGAINWIN", GetIntegerDisplayValue(module?.TrainingStrenghGainWin))
                     .Replace("#MODULETRAININGSTRENGTHGAINLOSECLASS", GetIntegerCssClass(module?.TrainingStrenghGainLose))
@@ -121,6 +146,15 @@ namespace OmnipetModuleEditor.docgenerators
                     .Replace("#MODULEBATTLEGLOBALHITPOINTS", GetIntegerDisplayValue(module?.BattleGlobalHitPoints))
                     .Replace("#MODULEBATTLESEQUENTIALROUNDSCLASS", module?.BattleSequentialRounds == true ? "boolean-true" : "boolean-false")
                     .Replace("#MODULEBATTLESEQUENTIALROUNDS", module?.BattleSequentialRounds == true ? "Yes" : "No")
+
+                    // Battle Cost - NEW
+                    .Replace("#MODULEBATTLECOSTTYPE", module?.BattleCostType ?? "DP")
+                    .Replace("#MODULEBATTLECOSTAMOUNTCLASS", GetFloatCssClass(module?.BattleCostAmount))
+                    .Replace("#MODULEBATTLECOSTAMOUNT", GetFloatDisplayValue(module?.BattleCostAmount))
+
+                    // Battle Enable Feeding - NEW
+                    .Replace("#MODULEBATTLEENABLEFEEDINGCLASS", module?.BattleEnableFeeding == true ? "boolean-true" : "boolean-false")
+                    .Replace("#MODULEBATTLEENABLEFEEDING", module?.BattleEnableFeeding == true ? "Yes" : "No")
                     
                     // Battle Minigame - NEW
                     .Replace("#MODULEBATTLEMINIGAMECLASS", !string.IsNullOrWhiteSpace(module?.BattleMinigame) && module?.BattleMinigame != "None" ? "" : "boolean-false")
@@ -175,6 +209,8 @@ namespace OmnipetModuleEditor.docgenerators
                     .Replace("#MODULEGCELLBATTLEWIN", GetIntegerDisplayValue(module?.GCellBattleWin))
                     .Replace("#MODULEGCELLBATTLELOOSECLASS", GetIntegerCssClass(module?.GCellBattleLoose))
                     .Replace("#MODULEGCELLBATTLELOOSE", GetIntegerDisplayValue(module?.GCellBattleLoose))
+                    .Replace("#MODULEGCELLTRAININGSUCCESSCLASS", GetIntegerCssClass(module?.GCellTrainingSuccess))
+                    .Replace("#MODULEGCELLTRAININGSUCCESS", GetIntegerDisplayValue(module?.GCellTrainingSuccess))
                     .Replace("#MODULEGCELLTRAININGPHASE2FAILURECLASS", GetIntegerCssClass(module?.GCellTrainingPhase2Failure))
                     .Replace("#MODULEGCELLTRAININGPHASE2FAILURE", GetIntegerDisplayValue(module?.GCellTrainingPhase2Failure))
                     .Replace("#MODULEGCELLTRAININGPHASE1FAILURECLASS", GetIntegerCssClass(module?.GCellTrainingPhase1Failure))

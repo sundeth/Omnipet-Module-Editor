@@ -135,8 +135,9 @@ namespace OmnipetModuleEditor.Utils
             if (pet == null || string.IsNullOrEmpty(modulePath))
                 return new List<Image>();
 
-            bool moduleHighDefinitionSprites = module?.HighDefinitionSprites ?? false;
-            var spritesDict = SpriteUtils.LoadPetSprites(pet.Name, modulePath, FixedNameFormat, spriteCount, moduleHighDefinitionSprites);
+            string primary = module?.PrimarySpriteFormat ?? "Color";
+            string secondary = module?.SecondarySpriteFormat ?? "HD";
+            var spritesDict = SpriteUtils.LoadPetSprites(pet.Name, modulePath, FixedNameFormat, spriteCount, primary, secondary);
             return SpriteUtils.ConvertSpritesToList(spritesDict, spriteCount);
         }
 
@@ -148,8 +149,9 @@ namespace OmnipetModuleEditor.Utils
             if (string.IsNullOrEmpty(petName) || string.IsNullOrEmpty(modulePath))
                 return null;
 
-            bool moduleHighDefinitionSprites = module?.HighDefinitionSprites ?? false;
-            var sprites = SpriteUtils.LoadPetSprites(petName, modulePath, FixedNameFormat, 1, moduleHighDefinitionSprites);
+            string primary = module?.PrimarySpriteFormat ?? "Color";
+            string secondary = module?.SecondarySpriteFormat ?? "HD";
+            var sprites = SpriteUtils.LoadPetSprites(petName, modulePath, FixedNameFormat, 1, primary, secondary);
             return sprites.ContainsKey("0") ? sprites["0"] : null;
         }
 
@@ -200,6 +202,54 @@ namespace OmnipetModuleEditor.Utils
                 }
             }
             return atkSprites;
+        }
+
+        /// <summary>
+        /// Loads critical attack sprites from atk_crit folder with the same fallback logic as LoadAtkSprites.
+        /// </summary>
+        public static Dictionary<int, Image> LoadAtkCritSprites(string modulePath)
+        {
+            Dictionary<int, Image> atkCritSprites = new Dictionary<int, Image>();
+            string modulesDir = Path.GetDirectoryName(modulePath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+            string rootDir = Path.GetDirectoryName(modulesDir);
+            string resourcesAtkCrit = Path.Combine(rootDir, "assets", "atk_crit");
+
+            string moduleAtkCrit = Path.Combine(modulePath, "atk_crit");
+            bool moduleAtkCritExists = Directory.Exists(moduleAtkCrit);
+
+            int i = 1;
+            bool foundSprites = true;
+            while (foundSprites)
+            {
+                string path = null;
+                if (moduleAtkCritExists)
+                {
+                    string customPath = Path.Combine(moduleAtkCrit, $"{i}.png");
+                    if (File.Exists(customPath))
+                        path = customPath;
+                }
+                if (path == null)
+                {
+                    string fallbackPath = Path.Combine(resourcesAtkCrit, $"{i}.png");
+                    if (File.Exists(fallbackPath))
+                        path = fallbackPath;
+                }
+
+                if (path != null)
+                {
+                    try
+                    {
+                        atkCritSprites[i] = Image.FromFile(path);
+                    }
+                    catch { atkCritSprites[i] = null; }
+                    i++;
+                }
+                else
+                {
+                    foundSprites = false;
+                }
+            }
+            return atkCritSprites;
         }
 
         /// <summary>

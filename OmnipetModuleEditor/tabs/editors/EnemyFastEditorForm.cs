@@ -324,9 +324,9 @@ namespace OmnipetModuleEditor
         {
             if (string.IsNullOrEmpty(modulePath)) return;
             
-            // Use new sprite loading system with high definition support
-            bool moduleHighDefinitionSprites = module?.HighDefinitionSprites ?? false;
-            var sprite = SpriteUtils.LoadSingleSprite(petName, modulePath, PetUtils.FixedNameFormat, moduleHighDefinitionSprites);
+            string primary = module?.PrimarySpriteFormat ?? "Color";
+            string secondary = module?.SecondarySpriteFormat ?? "HD";
+            var sprite = SpriteUtils.LoadSingleSprite(petName, modulePath, PetUtils.FixedNameFormat, primary, secondary);
             pb.Image = sprite;
         }
 
@@ -578,9 +578,9 @@ namespace OmnipetModuleEditor
             {
                 if (string.IsNullOrEmpty(modulePath)) return;
                 
-                // Use new sprite loading system with high definition support
-                bool moduleHighDefinitionSprites = module?.HighDefinitionSprites ?? false;
-                var sprite = SpriteUtils.LoadSingleSprite(name, modulePath, PetUtils.FixedNameFormat, moduleHighDefinitionSprites);
+                string primary = module?.PrimarySpriteFormat ?? "Color";
+                string secondary = module?.SecondarySpriteFormat ?? "HD";
+                var sprite = SpriteUtils.LoadSingleSprite(name, modulePath, PetUtils.FixedNameFormat, primary, secondary);
                 pb.Image = sprite;
             }
 

@@ -371,9 +371,10 @@ namespace OmnipetModuleEditor
                 BorderStyle = BorderStyle.FixedSingle
             };
 
-            // Use new sprite loading system with high definition support
-            bool moduleHighDefinitionSprites = module?.HighDefinitionSprites ?? false;
-            var sprite = SpriteUtils.LoadSingleSprite(pet.Name, modulePath, PetUtils.FixedNameFormat, moduleHighDefinitionSprites);
+            // Use new sprite loading system with format support
+            string primary = module?.PrimarySpriteFormat ?? "Color";
+            string secondary = module?.SecondarySpriteFormat ?? "HD";
+            var sprite = SpriteUtils.LoadSingleSprite(pet.Name, modulePath, PetUtils.FixedNameFormat, primary, secondary);
             pb.Image = sprite;
 
             itemPanel.Controls.Add(pb);

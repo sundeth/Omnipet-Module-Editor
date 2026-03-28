@@ -268,9 +268,9 @@ namespace OmnipetModuleEditor.Controls
             if (result != DialogResult.Yes)
                 return;
 
-            // Determine which monsters folder to use based on high definition setting
-            bool useHighDefinition = CurrentModule?.HighDefinitionSprites ?? false;
-            string monstersFolder = useHighDefinition ? "monsters_hidef" : "monsters";
+            // Determine which monsters folder to use based on primary sprite format
+            string primaryFormat = SpriteUtils.NormalizeFormat(CurrentModule?.PrimarySpriteFormat);
+            string monstersFolder = SpriteUtils.GetFolderForFormat(primaryFormat);
             string targetFolder = Path.Combine(ModulePath, monstersFolder);
             
             if (!Directory.Exists(targetFolder))
@@ -322,14 +322,13 @@ namespace OmnipetModuleEditor.Controls
                         // Load the selected image
                         Image portraitImage = Image.FromFile(openFileDialog.FileName);
 
-                        // Determine which monsters folder to use
-                        bool useHighDefinition = CurrentModule?.HighDefinitionSprites ?? false;
-                        string monstersFolder = useHighDefinition ? "monsters_hidef" : "monsters";
-                        
+                        // Find where the sprites are actually stored using the format-aware fallback logic
+                        string primaryFormat = SpriteUtils.NormalizeFormat(CurrentModule?.PrimarySpriteFormat);
+                        string secondaryFormat = SpriteUtils.NormalizeFormat(CurrentModule?.SecondarySpriteFormat);
                         string spriteName = SpriteUtils.GetSpriteName(CurrentPet.Name, SpriteUtils.DefaultNameFormat);
 
-                        // Find where the sprites are actually stored using the same fallback logic as loading
-                        string spriteLocation = FindSpriteLocation(ModulePath, monstersFolder, spriteName);
+                        var locationResult = SpriteUtils.FindSpriteLocation(CurrentPet.Name, ModulePath, SpriteUtils.DefaultNameFormat, primaryFormat, secondaryFormat);
+                        string spriteLocation = locationResult.LoadedPath;
 
                         if (spriteLocation == null)
                         {
@@ -362,34 +361,6 @@ namespace OmnipetModuleEditor.Controls
                     }
                 }
             }
-        }
-
-        /// <summary>
-        /// Finds where the pet's sprites are actually stored using the same fallback logic as sprite loading.
-        /// Returns the full path to either a directory or a zip file, or null if not found.
-        /// </summary>
-        private string FindSpriteLocation(string modulePath, string monstersFolder, string spriteName)
-        {
-            // Try module monsters folder (directory first, then zip)
-            string moduleDir = Path.Combine(modulePath, monstersFolder, spriteName);
-            if (Directory.Exists(moduleDir) && Directory.GetFiles(moduleDir, "*.png").Length > 0)
-                return moduleDir;
-
-            string moduleZip = Path.Combine(modulePath, monstersFolder, $"{spriteName}.zip");
-            if (File.Exists(moduleZip))
-                return moduleZip;
-
-            // Try assets folder (directory first, then zip)
-            string assetsDir = Path.Combine("assets", monstersFolder, spriteName);
-            if (Directory.Exists(assetsDir) && Directory.GetFiles(assetsDir, "*.png").Length > 0)
-                return assetsDir;
-
-            string assetsZip = Path.Combine("assets", monstersFolder, $"{spriteName}.zip");
-            if (File.Exists(assetsZip))
-                return assetsZip;
-
-            // Not found
-            return null;
         }
 
         /// <summary>

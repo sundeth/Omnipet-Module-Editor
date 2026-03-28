@@ -150,6 +150,7 @@ namespace OmnipetModuleEditor.Tabs
         private void PopulatePetPanel()
         {
             var scrollPos = petListPanel.PanelPetList.AutoScrollPosition;
+            petListPanel.PanelPetList.SuspendLayout();
             petListPanel.PanelPetList.Controls.Clear();
             int y = 0;
             
@@ -162,6 +163,8 @@ namespace OmnipetModuleEditor.Tabs
                 petListPanel.PanelPetList.Controls.Add(petPanel);
                 y += 56;
             }
+            petListPanel.PanelPetList.AutoScrollMinSize = new Size(0, y);
+            petListPanel.PanelPetList.ResumeLayout(true);
             petListPanel.PanelPetList.AutoScrollPosition = new Point(-scrollPos.X, -scrollPos.Y);
         }
 
@@ -171,6 +174,7 @@ namespace OmnipetModuleEditor.Tabs
         internal Panel PopulatePetPanelAndReturnPanel(Pet petToSelect = null)
         {
             var scrollPos = petListPanel.PanelPetList.AutoScrollPosition;
+            petListPanel.PanelPetList.SuspendLayout();
             petListPanel.PanelPetList.Controls.Clear();
             int y = 0;
             Panel selected = null;
@@ -186,6 +190,8 @@ namespace OmnipetModuleEditor.Tabs
                     selected = petPanel;
                 y += 56;
             }
+            petListPanel.PanelPetList.AutoScrollMinSize = new Size(0, y);
+            petListPanel.PanelPetList.ResumeLayout(true);
             petListPanel.PanelPetList.AutoScrollPosition = new Point(-scrollPos.X, -scrollPos.Y);
             return selected;
         }
@@ -503,6 +509,7 @@ namespace OmnipetModuleEditor.Tabs
             // private List<Panel> spriteBoxes = new List<Panel>();
 
             private Dictionary<int, Image> atkSprites = new Dictionary<int, Image>();
+            private Dictionary<int, Image> atkCritSprites = new Dictionary<int, Image>();
 
             private Button btnEditEvolutions;
             
@@ -863,18 +870,21 @@ namespace OmnipetModuleEditor.Tabs
                 // Clear and add item 0 (None)
                 CmbAtkMain.Items.Clear();
                 CmbAtkAlt.Items.Clear();
-                CmbAtkAlt2.Items.Clear();  // NEW: Clear ATK Alt 2 combo
+                CmbAtkAlt2.Items.Clear();
                 CmbAtkMain.Items.Add(new AtkComboItem(0, null));
                 CmbAtkAlt.Items.Add(new AtkComboItem(0, null));
-                CmbAtkAlt2.Items.Add(new AtkComboItem(0, null));  // NEW: Add default item to ATK Alt 2
+                CmbAtkAlt2.Items.Add(new AtkComboItem(0, null));
 
-                // Use all available attack sprites instead of hardcoding to 117
                 foreach (var kvp in atkSprites.OrderBy(x => x.Key))
                 {
                     var item = new AtkComboItem(kvp.Key, kvp.Value);
                     CmbAtkMain.Items.Add(item);
                     CmbAtkAlt.Items.Add(item);
-                    CmbAtkAlt2.Items.Add(item);  // NEW: Add to ATK Alt 2 combo
+                }
+
+                foreach (var kvp in atkCritSprites.OrderBy(x => x.Key))
+                {
+                    CmbAtkAlt2.Items.Add(new AtkComboItem(kvp.Key, kvp.Value));
                 }
             }
 
@@ -901,6 +911,7 @@ namespace OmnipetModuleEditor.Tabs
             internal void LoadAtkSprites(string modulePath)
             {
                 this.atkSprites = PetUtils.LoadAtkSprites(modulePath);
+                this.atkCritSprites = PetUtils.LoadAtkCritSprites(modulePath);
             }
         }
 
