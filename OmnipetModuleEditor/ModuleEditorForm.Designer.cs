@@ -10,6 +10,7 @@
         private System.Windows.Forms.TabControl tabControlMain;
         private System.Windows.Forms.Panel panelBottom;
         private System.Windows.Forms.Button buttonSave;
+        private System.Windows.Forms.Button buttonReport;
         private System.Windows.Forms.Button buttonCancel;
         private System.Windows.Forms.Button buttonGenerateDoc;
         private System.Windows.Forms.Button buttonOpenDoc;
@@ -40,6 +41,7 @@
             this.tabControlMain = new System.Windows.Forms.TabControl();
             this.panelBottom = new System.Windows.Forms.Panel();
             this.buttonSave = new System.Windows.Forms.Button();
+            this.buttonReport = new System.Windows.Forms.Button();
             this.buttonCancel = new System.Windows.Forms.Button();
             this.buttonGenerateDoc = new System.Windows.Forms.Button();
             this.buttonOpenDoc = new System.Windows.Forms.Button();
@@ -65,6 +67,7 @@
             this.panelBottom.Controls.Add(this.buttonOpenDoc);
             this.panelBottom.Controls.Add(this.buttonAccount);
             this.panelBottom.Controls.Add(this.buttonPublish);
+            this.panelBottom.Controls.Add(this.buttonReport);
             this.panelBottom.Controls.Add(this.buttonSave);
             this.panelBottom.Controls.Add(this.buttonCancel);
             this.panelBottom.Dock = System.Windows.Forms.DockStyle.Bottom;
@@ -121,6 +124,18 @@
             this.buttonPublish.Text = "Publish";
             this.buttonPublish.UseVisualStyleBackColor = true;
             this.buttonPublish.Click += new System.EventHandler(this.buttonPublish_Click);
+            // 
+            // buttonReport
+            // 
+            this.buttonReport.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right)));
+            this.buttonReport.Location = new System.Drawing.Point(870, 12);
+            this.buttonReport.Margin = new System.Windows.Forms.Padding(2, 2, 2, 2);
+            this.buttonReport.Name = "buttonReport";
+            this.buttonReport.Size = new System.Drawing.Size(80, 24);
+            this.buttonReport.TabIndex = 6;
+            this.buttonReport.Text = "Report";
+            this.buttonReport.UseVisualStyleBackColor = true;
+            this.buttonReport.Click += new System.EventHandler(this.buttonReport_Click);
             // 
             // buttonSave
             // 

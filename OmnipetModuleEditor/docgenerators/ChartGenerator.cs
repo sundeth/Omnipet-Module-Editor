@@ -59,7 +59,10 @@ namespace OmnipetModuleEditor.docgenerators
                 sb.AppendLine("</div>");
             }
 
-            string content = template.Replace("#EVOLUTIONCHARTS", sb.ToString());
+            string primaryFormat = (module?.PrimarySpriteFormat ?? "Color").ToLower();
+            string content = template
+                .Replace("#EVOLUTIONCHARTS", sb.ToString())
+                .Replace("#PRIMARYSPRITEFORMAT", primaryFormat);
             File.WriteAllText(Path.Combine(docPath, "charts.html"), content);
         }
 

@@ -7,6 +7,8 @@ using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 
 namespace OmnipetModuleEditor.Tabs
@@ -26,8 +28,10 @@ namespace OmnipetModuleEditor.Tabs
         private Button btnFastEditor;
         private Button btnUpdateAtkSprites;
         private PetSpritePanel spritePanel;
-        private Panel selectedPanel = null;
         private BattleEnemy selectedEnemy = null;
+        private int lastSearchIndex = -1;
+        private string lastSearchText = "";
+        private CancellationTokenSource _spriteLoadCts;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="BattleTab"/> class.
@@ -41,6 +45,11 @@ namespace OmnipetModuleEditor.Tabs
             enemyListPanel.BtnAdd.Click += BtnAdd_Click;
             btnFastEditor.Click += BtnFastEditor_Click;
             btnUpdateAtkSprites.Click += BtnUpdateAtkSprites_Click;
+            enemyListPanel.BtnGo.Click += (s, e) => SearchGo();
+            enemyListPanel.BtnPrev.Click += (s, e) => SearchPrevNext(-1);
+            enemyListPanel.BtnNext.Click += (s, e) => SearchPrevNext(1);
+            enemyListPanel.TxtSearch.KeyDown += (s, e) => { if (e.KeyCode == Keys.Enter) { SearchGo(); e.SuppressKeyPress = true; } };
+            enemyListPanel.VirtualList.ItemSelected += (s, enemy) => SelectEnemy(enemy);
         }
 
         #region Initialization
@@ -130,9 +139,27 @@ namespace OmnipetModuleEditor.Tabs
             this.modulePath = modulePath;
             this.module = module;
             LoadEnemiesFromJson();
-            enemyEditPanel.LoadAtkSprites(modulePath);
+            enemyEditPanel.LoadAtkSprites(modulePath, module?.PrimarySpriteFormat);
             enemyEditPanel.PopulateAtkCombos();
             enemyEditPanel.LoadItems(modulePath);
+        }
+
+        /// <summary>
+        /// Updates the module sprite format and refreshes the enemy list thumbnails
+        /// and the currently selected enemy's sprite panel.
+        /// </summary>
+        public void RefreshSpriteFormat(Module updatedModule)
+        {
+            this.module = updatedModule;
+            enemyEditPanel.LoadAtkSprites(modulePath, updatedModule?.PrimarySpriteFormat);
+            enemyEditPanel.PopulateAtkCombos();
+            PopulateEnemyPanel();
+            if (selectedEnemy != null)
+            {
+                SelectEnemy(selectedEnemy);
+                spritePanel.CurrentModule = updatedModule;
+                spritePanel.RefreshSprites();
+            }
         }
 
         /// <summary>
@@ -176,7 +203,6 @@ namespace OmnipetModuleEditor.Tabs
         {
             string battlePath = Path.Combine(this.modulePath, "battle.json");
             enemies = new List<BattleEnemy>();
-            enemyListPanel.PanelEnemyList.Controls.Clear();
 
             if (File.Exists(battlePath))
             {
@@ -187,9 +213,7 @@ namespace OmnipetModuleEditor.Tabs
                     {
                         var root = doc.RootElement;
                         if (root.TryGetProperty("enemies", out var enemiesElement))
-                        {
                             enemies = JsonSerializer.Deserialize<List<BattleEnemy>>(enemiesElement.GetRawText());
-                        }
                     }
                 }
                 catch (Exception ex)
@@ -215,111 +239,95 @@ namespace OmnipetModuleEditor.Tabs
         /// </summary>
         private void PopulateEnemyPanel()
         {
-            var scrollPos = enemyListPanel.PanelEnemyList.AutoScrollPosition;
-            enemyListPanel.PanelEnemyList.SuspendLayout();
-            enemyListPanel.PanelEnemyList.Controls.Clear();
-            int y = 0;
-            foreach (var enemy in enemies)
-            {
-                var enemyPanel = CreateEnemyPanel(enemy, y);
-                enemyListPanel.PanelEnemyList.Controls.Add(enemyPanel);
-                y += 56;
-            }
-            enemyListPanel.PanelEnemyList.AutoScrollMinSize = new Size(0, y);
-            enemyListPanel.PanelEnemyList.ResumeLayout(true);
-            enemyListPanel.PanelEnemyList.AutoScrollPosition = new Point(-scrollPos.X, -scrollPos.Y);
+            enemyListPanel.VirtualList.SetItems(enemies);
+            StartAsyncSpriteLoad();
+        }
+
+        private void PopulateEnemyPanelAndReturnPanel(BattleEnemy enemyToSelect)
+        {
+            enemyListPanel.VirtualList.SetItems(enemies);
+            StartAsyncSpriteLoad();
+            if (enemyToSelect != null)
+                SelectEnemy(enemyToSelect);
         }
 
         /// <summary>
-        /// Creates a panel for a single enemy.
+        /// Loads sprites into the virtual list asynchronously, one at a time,
+        /// so the UI stays responsive. Cancels any prior load.
         /// </summary>
-        private Panel CreateEnemyPanel(BattleEnemy enemy, int y)
+        private void StartAsyncSpriteLoad()
         {
-            var itemPanel = new Panel
-            {
-                Location = new Point(0, y),
-                Size = new Size(enemyListPanel.PanelEnemyList.Width - 20, 56),
-                BorderStyle = BorderStyle.FixedSingle,
-                BackColor = Color.White,
-                Tag = enemy
-            };
+            _spriteLoadCts?.Cancel();
+            _spriteLoadCts?.Dispose();
+            _spriteLoadCts = new CancellationTokenSource();
+            var cts = _spriteLoadCts;
 
-            itemPanel.Click += (s, e) => SelectEnemyPanel(itemPanel);
-
-            PictureBox pb = new PictureBox
-            {
-                Location = new Point(4, 4),
-                Size = new Size(48, 48),
-                SizeMode = PictureBoxSizeMode.Zoom,
-                BackColor = GetAttributeColor(enemy.Attribute ?? ""),
-                BorderStyle = BorderStyle.FixedSingle
-            };
-
-            // Use new SpriteUtils system for loading enemy sprites with format support
-            string primary = module?.PrimarySpriteFormat ?? "Color";
+            var snapshot  = (enemies ?? new List<BattleEnemy>()).ToList();
+            string primary   = module?.PrimarySpriteFormat   ?? "Color";
             string secondary = module?.SecondarySpriteFormat ?? "HD";
-            var sprite = SpriteUtils.LoadSingleSprite(enemy.Name, modulePath, module?.NameFormat ?? SpriteUtils.DefaultNameFormat, primary, secondary);
-            pb.Image = sprite;
+            string nameFmt   = module?.NameFormat            ?? SpriteUtils.DefaultNameFormat;
+            string path      = modulePath;
+            var virtualList  = enemyListPanel.VirtualList;
 
-            itemPanel.Controls.Add(pb);
+            // Ensure the control handle exists before the background thread tries to
+            // BeginInvoke on it. Accessing .Handle forces creation on the UI thread.
+            var _ = virtualList.Handle;
 
-            Label lblName = new Label
+            Task.Run(() =>
             {
-                Text = enemy.Name,
-                Location = new Point(60, 4),
-                AutoSize = true,
-                Font = new Font(Font.FontFamily, 11, FontStyle.Bold),
-                ForeColor = Color.DeepSkyBlue
-            };
+                foreach (var enemy in snapshot)
+                {
+                    if (cts.IsCancellationRequested) break;
+                    if (string.IsNullOrEmpty(enemy?.Name)) continue;
 
-            itemPanel.Controls.Add(lblName);
+                    Image sprite = null;
+                    try { sprite = SpriteUtils.LoadSingleSprite(enemy.Name, path, nameFmt, primary, secondary); }
+                    catch (Exception ex)
+                    { System.Diagnostics.Debug.WriteLine($"[BattleTab] Sprite '{enemy.Name}': {ex.Message}"); }
 
-            Label lblInfo = new Label
-            {
-                Text = string.Format(Properties.Resources.BattleTab_Label_Info ?? "Ver. {0} | Stage {1} | Area {2} | Round {3}", enemy.Version, enemy.Stage, enemy.Area, enemy.Round),
-                Location = new Point(60, 28),
-                AutoSize = true,
-                Font = new Font(Font.FontFamily, 8, FontStyle.Regular),
-                ForeColor = Color.DeepSkyBlue
-            };
+                    if (cts.IsCancellationRequested) { sprite?.Dispose(); break; }
 
-            itemPanel.Controls.Add(lblInfo);
-
-            return itemPanel;
+                    var name = enemy.Name;
+                    var img  = sprite;
+                    try
+                    {
+                        virtualList.BeginInvoke(new Action(() =>
+                        {
+                            if (!cts.IsCancellationRequested)
+                                virtualList.SetSprite(name, img);
+                            else
+                                img?.Dispose();
+                        }));
+                    }
+                    catch (InvalidOperationException) { img?.Dispose(); continue; }
+                }
+                System.Diagnostics.Debug.WriteLine($"[BattleTab] Sprite load done (cancelled={cts.IsCancellationRequested})");
+            }, cts.Token);
         }
 
         #endregion
 
         #region Selection
 
-        /// <summary>
-        /// Selects the given enemy panel and loads its data for editing.
-        /// </summary>
-        private void SelectEnemyPanel(Panel panel)
+        private void SelectEnemy(BattleEnemy enemy)
         {
-            if (selectedPanel != null)
-                selectedPanel.BackColor = Color.White;
-
-            selectedPanel = panel;
-            selectedPanel.BackColor = Color.LightBlue;
-
-            selectedEnemy = panel.Tag as BattleEnemy;
-            enemyEditPanel.LoadEnemy(selectedEnemy);
-
-            // Update the sprite panel
+            if (enemy == null) return;
+            selectedEnemy = enemy;
+            enemyListPanel.VirtualList.SelectItem(enemy);
+            enemyEditPanel.LoadEnemy(enemy);
             spritePanel.CurrentPet = new Pet
             {
-                Name = selectedEnemy.Name,
-                Stage = selectedEnemy.Stage,
-                Version = selectedEnemy.Version,
-                AtkMain = selectedEnemy.AtkMain,
-                AtkAlt = selectedEnemy.AtkAlt,
-                Attribute = selectedEnemy.Attribute,
-                Power = selectedEnemy.Power,
-                Hp = selectedEnemy.Hp
+                Name      = enemy.Name,
+                Stage     = enemy.Stage,
+                Version   = enemy.Version,
+                AtkMain   = enemy.AtkMain,
+                AtkAlt    = enemy.AtkAlt,
+                Attribute = enemy.Attribute,
+                Power     = enemy.Power,
+                Hp        = enemy.Hp
             };
             spritePanel.CurrentModule = module;
-            spritePanel.ModulePath = modulePath;
+            spritePanel.ModulePath    = modulePath;
             spritePanel.RefreshSprites();
         }
 
@@ -362,8 +370,24 @@ namespace OmnipetModuleEditor.Tabs
                 Unlock = enemy.Unlock,
                 AtkMain = enemy.AtkMain,
                 AtkAlt = enemy.AtkAlt,
-                AtkAlt2 = enemy.AtkAlt2  // NEW: Clone AtkAlt2
+                AtkAlt2 = enemy.AtkAlt2
             };
+        }
+
+        /// <summary>
+        /// Sorts the enemies list by version, then area, then round.
+        /// </summary>
+        private void SortEnemies()
+        {
+            if (enemies == null) return;
+            enemies.Sort((a, b) =>
+            {
+                int cmp = a.Version.CompareTo(b.Version);
+                if (cmp != 0) return cmp;
+                cmp = a.Area.CompareTo(b.Area);
+                if (cmp != 0) return cmp;
+                return a.Round.CompareTo(b.Round);
+            });
         }
 
         #endregion
@@ -482,6 +506,46 @@ namespace OmnipetModuleEditor.Tabs
             MessageBox.Show($"Updated {updatedCount} of {enemies.Count} enemies.", "Update Attack Sprites", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
 
+        private void SearchGo()
+        {
+            string query = enemyListPanel.TxtSearch.Text;
+            if (string.IsNullOrWhiteSpace(query)) return;
+            lastSearchText = query;
+            lastSearchIndex = -1;
+            SearchPrevNext(1);
+        }
+
+        private void SearchPrevNext(int direction)
+        {
+            string query = enemyListPanel.TxtSearch.Text;
+            if (string.IsNullOrWhiteSpace(query)) return;
+
+            int count = enemies?.Count ?? 0;
+            if (count == 0) return;
+
+            if (!string.Equals(query, lastSearchText, StringComparison.OrdinalIgnoreCase))
+            {
+                lastSearchText = query;
+                lastSearchIndex = -1;
+            }
+
+            int start = lastSearchIndex + direction;
+            for (int i = 0; i < count; i++)
+            {
+                int idx = ((start + i * direction) % count + count) % count;
+                var enemy = enemies[idx];
+                if (enemy?.Name != null &&
+                    enemy.Name.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    lastSearchIndex = idx;
+                    SelectEnemy(enemy);
+                    return;
+                }
+            }
+        }
+
+        private void ScrollToPanel(Panel panel) { } // kept for compatibility; no longer needed
+
         private void BtnRemove_Click(object sender, EventArgs e)
         {
             if (selectedEnemy == null) return;
@@ -495,7 +559,6 @@ namespace OmnipetModuleEditor.Tabs
             {
                 enemies.Remove(selectedEnemy);
                 selectedEnemy = null;
-                selectedPanel = null;
                 PopulateEnemyPanel();
                 Save();
             }
@@ -513,8 +576,10 @@ namespace OmnipetModuleEditor.Tabs
             var newEnemy = CloneEnemy(copiedEnemy);
             newEnemy.Name += Properties.Resources.BattleTab_CopySuffix ?? " Copy";
             enemies.Add(newEnemy);
+            SortEnemies();
             PopulateEnemyPanel();
             Save();
+            SelectEnemy(newEnemy);
         }
 
         private void BtnAdd_Click(object sender, EventArgs e)
@@ -595,12 +660,10 @@ namespace OmnipetModuleEditor.Tabs
                     if (enemies == null)
                         enemies = new List<BattleEnemy>();
                     enemies.Add(newEnemy);
+                    SortEnemies();
                     PopulateEnemyPanel();
                     Save();
-                    // Select the new enemy for editing
-                    var lastPanel = enemyListPanel.PanelEnemyList.Controls.Cast<Panel>().LastOrDefault();
-                    if (lastPanel != null)
-                        SelectEnemyPanel(lastPanel);
+                    SelectEnemy(newEnemy);
                 }
             }
         }
@@ -612,16 +675,19 @@ namespace OmnipetModuleEditor.Tabs
         // Left panel (enemy list and buttons)
         private class EnemyListPanel : UserControl
         {
-            public Panel PanelEnemyList { get; private set; }
+            public VirtualEnemyList VirtualList { get; private set; }
+            // Kept as Panel for any legacy reference; same object as VirtualList
+            public Panel PanelEnemyList => VirtualList;
             public Button BtnAdd { get; private set; }
             public Button BtnRemove { get; private set; }
             public Button BtnCopy { get; private set; }
             public Button BtnPaste { get; private set; }
+            public TextBox TxtSearch { get; private set; }
+            public Button BtnGo { get; private set; }
+            public Button BtnPrev { get; private set; }
+            public Button BtnNext { get; private set; }
 
-            public EnemyListPanel()
-            {
-                InitializeComponent();
-            }
+            public EnemyListPanel() { InitializeComponent(); }
 
             private void InitializeComponent()
             {
@@ -630,19 +696,29 @@ namespace OmnipetModuleEditor.Tabs
                 {
                     Dock = DockStyle.Fill,
                     ColumnCount = 1,
-                    RowCount = 2,
+                    RowCount = 3,
                     BackColor = SystemColors.ControlLight
                 };
+                leftLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 30F));
                 leftLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
                 leftLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 40F));
 
-                PanelEnemyList = new Panel
+                var searchPanel = new FlowLayoutPanel
                 {
                     Dock = DockStyle.Fill,
-                    AutoScroll = true,
-                    BackColor = Color.White
+                    FlowDirection = FlowDirection.LeftToRight,
+                    Padding = new Padding(2, 2, 2, 0),
+                    WrapContents = false
                 };
-                leftLayout.Controls.Add(PanelEnemyList, 0, 0);
+                TxtSearch = new TextBox { Width = 130, Margin = new Padding(0, 2, 2, 0) };
+                BtnGo   = new Button { Text = "Go", Width = 36, Height = 23, Margin = new Padding(0, 1, 2, 0) };
+                BtnPrev = new Button { Text = "<",  Width = 28, Height = 23, Margin = new Padding(0, 1, 2, 0) };
+                BtnNext = new Button { Text = ">",  Width = 28, Height = 23, Margin = new Padding(0, 1, 0, 0) };
+                searchPanel.Controls.AddRange(new Control[] { TxtSearch, BtnGo, BtnPrev, BtnNext });
+                leftLayout.Controls.Add(searchPanel, 0, 0);
+
+                VirtualList = new VirtualEnemyList { Dock = DockStyle.Fill };
+                leftLayout.Controls.Add(VirtualList, 0, 1);
 
                 var panelButtons = new FlowLayoutPanel
                 {
@@ -650,19 +726,15 @@ namespace OmnipetModuleEditor.Tabs
                     FlowDirection = FlowDirection.LeftToRight,
                     Padding = new Padding(4),
                     AutoSize = false,
-                    AutoSizeMode = AutoSizeMode.GrowAndShrink,
                     WrapContents = false
                 };
-
-                BtnAdd = new Button { Text = "Add", Width = 70, Margin = new Padding(0, 0, 4, 0) };
+                BtnAdd    = new Button { Text = "Add",    Width = 70, Margin = new Padding(0, 0, 4, 0) };
                 BtnRemove = new Button { Text = "Remove", Width = 70, Margin = new Padding(0, 0, 4, 0) };
-                BtnCopy = new Button { Text = "Copy", Width = 70, Margin = new Padding(0, 0, 4, 0) };
-                BtnPaste = new Button { Text = "Paste", Width = 70, Margin = new Padding(0, 0, 4, 0) };
-
+                BtnCopy   = new Button { Text = "Copy",   Width = 70, Margin = new Padding(0, 0, 4, 0) };
+                BtnPaste  = new Button { Text = "Paste",  Width = 70, Margin = new Padding(0, 0, 4, 0) };
                 BtnAdd.Height = BtnRemove.Height = BtnCopy.Height = BtnPaste.Height = 36;
-
                 panelButtons.Controls.AddRange(new Control[] { BtnAdd, BtnRemove, BtnCopy, BtnPaste });
-                leftLayout.Controls.Add(panelButtons, 0, 1);
+                leftLayout.Controls.Add(panelButtons, 0, 2);
 
                 this.Controls.Add(leftLayout);
             }
@@ -754,8 +826,11 @@ namespace OmnipetModuleEditor.Tabs
                 CmbPrize = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList };
                 TxtUnlock = new TextBox();
                 CmbAtkMain = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList };
-                CmbAtkAlt = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList };
-                CmbAtkAlt2 = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList };  // NEW: ATK Alt 2
+                CmbAtkAlt  = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList };
+                CmbAtkAlt2 = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList };
+                CmbAtkMain.DrawMode  = DrawMode.OwnerDrawFixed; CmbAtkMain.ItemHeight  = 36; CmbAtkMain.DrawItem  += AtkCombo_DrawItem;
+                CmbAtkAlt.DrawMode   = DrawMode.OwnerDrawFixed; CmbAtkAlt.ItemHeight   = 36; CmbAtkAlt.DrawItem   += AtkCombo_DrawItem;
+                CmbAtkAlt2.DrawMode  = DrawMode.OwnerDrawFixed; CmbAtkAlt2.ItemHeight  = 36; CmbAtkAlt2.DrawItem  += AtkCombo_DrawItem;
 
                 AddField("Name:", TxtName);
                 AddField("Power:", NumPower);
@@ -793,18 +868,10 @@ namespace OmnipetModuleEditor.Tabs
                     {
                         battleTab.enemyEditPanel.SaveToEnemy(battleTab.selectedEnemy);
                         battleTab.Save();
+                        var saved = battleTab.selectedEnemy;
+                        battleTab.SortEnemies();
                         battleTab.PopulateEnemyPanel();
-
-                        // Seleciona novamente o painel do inimigo editado (se ainda existir)
-                        var panel = battleTab.enemyListPanel.PanelEnemyList.Controls
-                            .OfType<Panel>()
-                            .FirstOrDefault(p => p.Tag is BattleEnemy be &&
-                                                 be.Name == battleTab.selectedEnemy.Name &&
-                                                 be.Area == battleTab.selectedEnemy.Area &&
-                                                 be.Round == battleTab.selectedEnemy.Round &&
-                                                 be.Version == battleTab.selectedEnemy.Version);
-                        if (panel != null)
-                            battleTab.SelectEnemyPanel(panel);
+                        battleTab.SelectEnemy(saved);
                     }
                 };
                 btnCancel.Click += (s, e) =>
@@ -830,6 +897,16 @@ namespace OmnipetModuleEditor.Tabs
                 return c as BattleTab;
             }
 
+            private int FindAtkComboIndex(ComboBox cmb, int number)
+            {
+                for (int i = 0; i < cmb.Items.Count; i++)
+                {
+                    if (cmb.Items[i] is AtkComboItem item && item.Number == number)
+                        return i;
+                }
+                return 0;
+            }
+
             public void LoadEnemy(BattleEnemy enemy)
             {
                 if (enemy == null) return;
@@ -845,9 +922,9 @@ namespace OmnipetModuleEditor.Tabs
                 NumHandicap.Value = Math.Max(NumHandicap.Minimum, Math.Min(enemy.Handicap, NumHandicap.Maximum));
                 CmbPrize.SelectedItem = enemy.Prize ?? "";
                 TxtUnlock.Text = enemy.Unlock ?? "";
-                CmbAtkMain.SelectedIndex = Math.Max(0, Math.Min(enemy.AtkMain, CmbAtkMain.Items.Count - 1));
-                CmbAtkAlt.SelectedIndex = Math.Max(0, Math.Min(enemy.AtkAlt, CmbAtkAlt.Items.Count - 1));
-                CmbAtkAlt2.SelectedIndex = Math.Max(0, Math.Min(enemy.AtkAlt2, CmbAtkAlt2.Items.Count - 1));  // NEW: Load AtkAlt2
+                CmbAtkMain.SelectedIndex = FindAtkComboIndex(CmbAtkMain, enemy.AtkMain);
+                CmbAtkAlt.SelectedIndex = FindAtkComboIndex(CmbAtkAlt, enemy.AtkAlt);
+                CmbAtkAlt2.SelectedIndex = FindAtkComboIndex(CmbAtkAlt2, enemy.AtkAlt2);
             }
 
             public void SaveToEnemy(BattleEnemy enemy)
@@ -864,15 +941,15 @@ namespace OmnipetModuleEditor.Tabs
                 enemy.Handicap = (int)NumHandicap.Value;
                 enemy.Prize = CmbPrize.SelectedItem?.ToString() ?? "";
                 enemy.Unlock = TxtUnlock.Text;
-                enemy.AtkMain = CmbAtkMain.SelectedIndex;
-                enemy.AtkAlt = CmbAtkAlt.SelectedIndex;
-                enemy.AtkAlt2 = CmbAtkAlt2.SelectedIndex;  // NEW: Save AtkAlt2
+                enemy.AtkMain = (CmbAtkMain.SelectedItem as AtkComboItem)?.Number ?? 0;
+                enemy.AtkAlt = (CmbAtkAlt.SelectedItem as AtkComboItem)?.Number ?? 0;
+                enemy.AtkAlt2 = (CmbAtkAlt2.SelectedItem as AtkComboItem)?.Number ?? 0;
             }
 
-            public void LoadAtkSprites(string modulePath)
+            public void LoadAtkSprites(string modulePath, string primaryFormat = null)
             {
-                this.atkSprites = PetUtils.LoadAtkSprites(modulePath);
-                this.atkCritSprites = PetUtils.LoadAtkCritSprites(modulePath);
+                this.atkSprites = PetUtils.LoadAtkSprites(modulePath, primaryFormat);
+                this.atkCritSprites = PetUtils.LoadAtkCritSprites(modulePath, primaryFormat);
             }
 
             public void PopulateAtkCombos()
@@ -928,7 +1005,24 @@ namespace OmnipetModuleEditor.Tabs
                 }
             }
 
-            // Classe auxiliar para mostrar n�mero + sprite
+            private void AtkCombo_DrawItem(object sender, DrawItemEventArgs e)
+            {
+                if (e.Index < 0) return;
+                var combo = sender as ComboBox;
+                var item  = combo.Items[e.Index] as AtkComboItem;
+                e.DrawBackground();
+                int x = e.Bounds.Left + 2;
+                if (item?.Sprite != null)
+                {
+                    e.Graphics.DrawImage(item.Sprite, x, e.Bounds.Top + 2, 32, 32);
+                    x += 36;
+                }
+                using (var brush = new SolidBrush(e.ForeColor))
+                    e.Graphics.DrawString(item?.ToString() ?? "", e.Font, brush, x, e.Bounds.Top + 8);
+                e.DrawFocusRectangle();
+            }
+
+            // Classe auxiliar para mostrar número + sprite
             private class AtkComboItem
             {
                 public int Number { get; }
@@ -943,5 +1037,181 @@ namespace OmnipetModuleEditor.Tabs
         }
 
         #endregion
+    }
+
+    // ---------------------------------------------------------------------------
+    // Owner-drawn virtual list — renders only visible rows so there is no per-item
+    // WinForms control and no 32 K GDI coordinate ceiling.
+    // ---------------------------------------------------------------------------
+    internal class VirtualEnemyList : Panel
+    {
+        private const int ItemHeight = 56;
+
+        private List<BattleEnemy> _items = new List<BattleEnemy>();
+        private readonly Dictionary<string, Image> _spriteCache =
+            new Dictionary<string, Image>(StringComparer.OrdinalIgnoreCase);
+        private int _selectedIndex = -1;
+        private Font _nameFont;
+        private Font _infoFont;
+
+        public event EventHandler<BattleEnemy> ItemSelected;
+
+        public BattleEnemy SelectedItem =>
+            (_selectedIndex >= 0 && _selectedIndex < _items.Count) ? _items[_selectedIndex] : null;
+
+        public int ItemCount => _items.Count;
+
+        public VirtualEnemyList()
+        {
+            SetStyle(
+                ControlStyles.OptimizedDoubleBuffer |
+                ControlStyles.AllPaintingInWmPaint  |
+                ControlStyles.UserPaint, true);
+            AutoScroll = true;
+            BackColor  = Color.White;
+            RebuildFonts();
+        }
+
+        private void RebuildFonts()
+        {
+            _nameFont?.Dispose();
+            _infoFont?.Dispose();
+            _nameFont = new Font(Font.FontFamily, 11, FontStyle.Bold);
+            _infoFont = new Font(Font.FontFamily,  8, FontStyle.Regular);
+        }
+
+        protected override void OnFontChanged(EventArgs e)
+        {
+            base.OnFontChanged(e);
+            RebuildFonts();
+        }
+
+        // --- Public API ---
+
+        public void SetItems(List<BattleEnemy> items)
+        {
+            _items         = items ?? new List<BattleEnemy>();
+            _selectedIndex = -1;
+            AutoScrollMinSize = new Size(0, _items.Count * ItemHeight);
+            Invalidate();
+        }
+
+        public void SetSprite(string name, Image sprite)
+        {
+            if (string.IsNullOrEmpty(name)) return;
+            if (_spriteCache.TryGetValue(name, out var old) && old != sprite)
+                old?.Dispose();
+            _spriteCache[name] = sprite;
+            Invalidate();
+        }
+
+        public void SelectItem(BattleEnemy enemy)
+        {
+            int idx = _items.IndexOf(enemy);
+            if (idx < 0) return;
+            _selectedIndex = idx;
+            EnsureVisible(idx);
+            Invalidate();
+        }
+
+        public BattleEnemy GetItem(int index) =>
+            (index >= 0 && index < _items.Count) ? _items[index] : null;
+
+        // --- Painting ---
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            if (_items.Count == 0) return;
+            int scrollY     = -AutoScrollPosition.Y;
+            int first       = Math.Max(0, scrollY / ItemHeight);
+            int last        = Math.Min(_items.Count - 1,
+                                       (scrollY + ClientSize.Height + ItemHeight - 1) / ItemHeight);
+            var g = e.Graphics;
+            for (int i = first; i <= last; i++)
+                DrawRow(g, i, scrollY);
+        }
+
+        private void DrawRow(Graphics g, int index, int scrollY)
+        {
+            var enemy    = _items[index];
+            int y        = index * ItemHeight - scrollY;
+            bool sel     = index == _selectedIndex;
+            int w        = ClientSize.Width;
+
+            using (var bg = new SolidBrush(sel ? Color.LightBlue : Color.White))
+                g.FillRectangle(bg, 0, y, w, ItemHeight);
+
+            using (var ab = new SolidBrush(AttrColor(enemy.Attribute ?? "")))
+                g.FillRectangle(ab, 4, y + 4, 48, 48);
+            g.DrawRectangle(Pens.Gray, 4, y + 4, 48, 48);
+
+            if (!string.IsNullOrEmpty(enemy.Name) &&
+                _spriteCache.TryGetValue(enemy.Name, out var sprite) && sprite != null)
+                g.DrawImage(sprite, new Rectangle(4, y + 4, 48, 48));
+
+            using (var tb = new SolidBrush(Color.DeepSkyBlue))
+            {
+                g.DrawString(enemy.Name ?? "", _nameFont, tb, 60, y + 4);
+                g.DrawString(
+                    string.Format("Ver. {0} | Stage {1} | Area {2} | Round {3}",
+                        enemy.Version, enemy.Stage, enemy.Area, enemy.Round),
+                    _infoFont, tb, 60, y + 30);
+            }
+
+            g.DrawLine(Pens.LightGray, 0, y + ItemHeight - 1, w, y + ItemHeight - 1);
+        }
+
+        private static Color AttrColor(string attr)
+        {
+            switch (attr)
+            {
+                case "Da": return Color.FromArgb(66,  165, 245);
+                case "Va": return Color.FromArgb(102, 187, 106);
+                case "Vi": return Color.FromArgb(237,  83,  80);
+                default:   return Color.FromArgb(171,  71, 188);
+            }
+        }
+
+        // --- Interaction ---
+
+        protected override void OnMouseDown(MouseEventArgs e)
+        {
+            base.OnMouseDown(e);
+            if (e.Button != MouseButtons.Left) return;
+            int idx = (e.Y + (-AutoScrollPosition.Y)) / ItemHeight;
+            if (idx >= 0 && idx < _items.Count)
+            {
+                _selectedIndex = idx;
+                Invalidate();
+                ItemSelected?.Invoke(this, _items[idx]);
+                Focus();
+            }
+        }
+
+        private void EnsureVisible(int idx)
+        {
+            int top     = idx * ItemHeight;
+            int scrollY = -AutoScrollPosition.Y;
+            if (top < scrollY)
+                AutoScrollPosition = new Point(0, top);
+            else if (top + ItemHeight > scrollY + ClientSize.Height)
+                AutoScrollPosition = new Point(0, top + ItemHeight - ClientSize.Height);
+        }
+
+        protected override void OnScroll(ScrollEventArgs se)    { base.OnScroll(se);    Invalidate(); }
+        protected override void OnMouseWheel(MouseEventArgs e)  { base.OnMouseWheel(e); Invalidate(); }
+        protected override void OnResize(EventArgs e)           { base.OnResize(e);     Invalidate(); }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                _nameFont?.Dispose();
+                _infoFont?.Dispose();
+                foreach (var img in _spriteCache.Values) img?.Dispose();
+                _spriteCache.Clear();
+            }
+            base.Dispose(disposing);
+        }
     }
 }

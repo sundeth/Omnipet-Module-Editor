@@ -155,49 +155,62 @@ namespace OmnipetModuleEditor.Utils
             return sprites.ContainsKey("0") ? sprites["0"] : null;
         }
 
-        public static Dictionary<int, Image> LoadAtkSprites(string modulePath)
+        public static Dictionary<int, Image> LoadAtkSprites(string modulePath, string primaryFormat = null)
         {
             Dictionary<int, Image> atkSprites = new Dictionary<int, Image>();
-            // Caminho do fallback: ...\resources\atk
             string modulesDir = Path.GetDirectoryName(modulePath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
-            string rootDir = Path.GetDirectoryName(modulesDir); //go to the root directory
+            string rootDir = Path.GetDirectoryName(modulesDir);
             string resourcesAtk = Path.Combine(rootDir, "assets", "atk");
 
-            // Novo: caminho do módulo
             string moduleAtk = Path.Combine(modulePath, "atk");
             bool moduleAtkExists = Directory.Exists(moduleAtk);
 
-            // Dynamically discover all available attack sprites instead of hardcoding to 117
+            bool isDot = string.Equals(primaryFormat, "Dot", StringComparison.OrdinalIgnoreCase);
+
             int i = 1;
             bool foundSprites = true;
             while (foundSprites)
             {
                 string path = null;
+
+                // Try module-local folder first
                 if (moduleAtkExists)
                 {
-                    string customPath = Path.Combine(moduleAtk, $"{i}.png");
-                    if (File.Exists(customPath))
-                        path = customPath;
+                    if (isDot)
+                    {
+                        string dotPath = Path.Combine(moduleAtk, $"{i}_Dot.png");
+                        if (File.Exists(dotPath)) path = dotPath;
+                    }
+                    if (path == null)
+                    {
+                        string customPath = Path.Combine(moduleAtk, $"{i}.png");
+                        if (File.Exists(customPath)) path = customPath;
+                    }
                 }
+
+                // Fall back to assets folder
                 if (path == null)
                 {
-                    string fallbackPath = Path.Combine(resourcesAtk, $"{i}.png");
-                    if (File.Exists(fallbackPath))
-                        path = fallbackPath;
+                    if (isDot)
+                    {
+                        string dotPath = Path.Combine(resourcesAtk, $"{i}_Dot.png");
+                        if (File.Exists(dotPath)) path = dotPath;
+                    }
+                    if (path == null)
+                    {
+                        string fallbackPath = Path.Combine(resourcesAtk, $"{i}.png");
+                        if (File.Exists(fallbackPath)) path = fallbackPath;
+                    }
                 }
 
                 if (path != null)
                 {
-                    try
-                    {
-                        atkSprites[i] = Image.FromFile(path);
-                    }
+                    try { atkSprites[i] = Image.FromFile(path); }
                     catch { atkSprites[i] = null; }
                     i++;
                 }
                 else
                 {
-                    // No sprite found for this index, stop searching
                     foundSprites = false;
                 }
             }
@@ -207,7 +220,7 @@ namespace OmnipetModuleEditor.Utils
         /// <summary>
         /// Loads critical attack sprites from atk_crit folder with the same fallback logic as LoadAtkSprites.
         /// </summary>
-        public static Dictionary<int, Image> LoadAtkCritSprites(string modulePath)
+        public static Dictionary<int, Image> LoadAtkCritSprites(string modulePath, string primaryFormat = null)
         {
             Dictionary<int, Image> atkCritSprites = new Dictionary<int, Image>();
             string modulesDir = Path.GetDirectoryName(modulePath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
@@ -217,30 +230,45 @@ namespace OmnipetModuleEditor.Utils
             string moduleAtkCrit = Path.Combine(modulePath, "atk_crit");
             bool moduleAtkCritExists = Directory.Exists(moduleAtkCrit);
 
+            bool isDot = string.Equals(primaryFormat, "Dot", StringComparison.OrdinalIgnoreCase);
+
             int i = 1;
             bool foundSprites = true;
             while (foundSprites)
             {
                 string path = null;
+
                 if (moduleAtkCritExists)
                 {
-                    string customPath = Path.Combine(moduleAtkCrit, $"{i}.png");
-                    if (File.Exists(customPath))
-                        path = customPath;
+                    if (isDot)
+                    {
+                        string dotPath = Path.Combine(moduleAtkCrit, $"{i}_Dot.png");
+                        if (File.Exists(dotPath)) path = dotPath;
+                    }
+                    if (path == null)
+                    {
+                        string customPath = Path.Combine(moduleAtkCrit, $"{i}.png");
+                        if (File.Exists(customPath)) path = customPath;
+                    }
                 }
+
                 if (path == null)
                 {
-                    string fallbackPath = Path.Combine(resourcesAtkCrit, $"{i}.png");
-                    if (File.Exists(fallbackPath))
-                        path = fallbackPath;
+                    if (isDot)
+                    {
+                        string dotPath = Path.Combine(resourcesAtkCrit, $"{i}_Dot.png");
+                        if (File.Exists(dotPath)) path = dotPath;
+                    }
+                    if (path == null)
+                    {
+                        string fallbackPath = Path.Combine(resourcesAtkCrit, $"{i}.png");
+                        if (File.Exists(fallbackPath)) path = fallbackPath;
+                    }
                 }
 
                 if (path != null)
                 {
-                    try
-                    {
-                        atkCritSprites[i] = Image.FromFile(path);
-                    }
+                    try { atkCritSprites[i] = Image.FromFile(path); }
                     catch { atkCritSprites[i] = null; }
                     i++;
                 }

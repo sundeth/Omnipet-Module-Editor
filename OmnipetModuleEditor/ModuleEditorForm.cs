@@ -1,5 +1,6 @@
 ﻿using OmnipetModuleEditor.controls;
 using OmnipetModuleEditor.OmniNet;
+using OmnipetModuleEditor.Reports;
 using OmnipetModuleEditor.Tabs;
 using System;
 using System.IO;
@@ -103,6 +104,12 @@ namespace OmnipetModuleEditor
         /// </summary>
         private void buttonSave_Click(object sender, EventArgs e)
         {
+            SaveAll();
+            MessageBox.Show(Properties.Resources.ModuleSaved, Properties.Resources.Save, MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+
+        private void SaveAll()
+        {
             foreach (TabPage tabPage in tabControlMain.TabPages)
             {
                 if (tabPage.Controls.Count > 0)
@@ -115,7 +122,6 @@ namespace OmnipetModuleEditor
                     }
                 }
             }
-            MessageBox.Show(Properties.Resources.ModuleSaved, Properties.Resources.Save, MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
 
         /// <summary>
@@ -150,13 +156,23 @@ namespace OmnipetModuleEditor
             petControl.Dock = DockStyle.Fill;
             petControl.SetModule(currentPath, currentModule);
 
-            var petTab = new TabPage(Properties.Resources.TabPet);
-            petTab.Controls.Add(petControl);
-            tabControlMain.TabPages.Add(petTab);
-
             var battleTabControl = new BattleTab();
             battleTabControl.Dock = DockStyle.Fill;
             battleTabControl.SetModule(currentPath, currentModule);
+
+            // When the sprite format changes in the Module tab, update Pet and Battle tabs immediately
+            // using the live values from the comboboxes (no disk save required)
+            moduleTabControl.SpriteFormatChanged += (s, e) =>
+            {
+                currentModule.PrimarySpriteFormat = moduleTabControl.CurrentPrimaryFormat;
+                currentModule.SecondarySpriteFormat = moduleTabControl.CurrentSecondaryFormat;
+                petControl.RefreshSpriteFormat(currentModule);
+                battleTabControl.RefreshSpriteFormat(currentModule);
+            };
+
+            var petTab = new TabPage(Properties.Resources.TabPet);
+            petTab.Controls.Add(petControl);
+            tabControlMain.TabPages.Add(petTab);
 
             var battleTab = new TabPage(Properties.Resources.TabBattle);
             battleTab.Controls.Add(battleTabControl);
@@ -212,6 +228,37 @@ namespace OmnipetModuleEditor
             else
             {
                 MessageBox.Show("Documentation not found. Please generate it first.", "Not Found", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+        }
+
+        private void buttonReport_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                // Save current state first so report uses latest data
+                SaveAll();
+
+                // Reload module from disk to get the freshly saved state
+                string moduleFile = Path.Combine(currentPath, "module.json");
+                Models.Module freshModule = currentModule;
+                if (File.Exists(moduleFile))
+                {
+                    try
+                    {
+                        string json = File.ReadAllText(moduleFile);
+                        freshModule = System.Text.Json.JsonSerializer.Deserialize<Models.Module>(json);
+                    }
+                    catch { }
+                }
+
+                var generator = new ModuleReportGenerator(currentPath, freshModule);
+                string report = generator.Generate();
+                var form = new ReportForm(report);
+                form.ShowDialog(this);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Error generating report:\n" + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
