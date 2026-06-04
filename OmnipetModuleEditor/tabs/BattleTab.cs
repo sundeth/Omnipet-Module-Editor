@@ -26,6 +26,7 @@ namespace OmnipetModuleEditor.Tabs
         private EnemyEditPanel enemyEditPanel;
         private BattleEnemy copiedEnemy = null;
         private Button btnFastEditor;
+        private Button btnSpecialEncounters;
         private Button btnUpdateAtkSprites;
         private PetSpritePanel spritePanel;
         private BattleEnemy selectedEnemy = null;
@@ -44,6 +45,7 @@ namespace OmnipetModuleEditor.Tabs
             enemyListPanel.BtnPaste.Click += BtnPaste_Click;
             enemyListPanel.BtnAdd.Click += BtnAdd_Click;
             btnFastEditor.Click += BtnFastEditor_Click;
+            btnSpecialEncounters.Click += BtnSpecialEncounters_Click;
             btnUpdateAtkSprites.Click += BtnUpdateAtkSprites_Click;
             enemyListPanel.BtnGo.Click += (s, e) => SearchGo();
             enemyListPanel.BtnPrev.Click += (s, e) => SearchPrevNext(-1);
@@ -97,6 +99,14 @@ namespace OmnipetModuleEditor.Tabs
                 Margin = new Padding(8, 16, 8, 8),
                 Anchor = AnchorStyles.Right
             };
+            btnSpecialEncounters = new Button
+            {
+                Text = "Special Encounters",
+                Width = 160,
+                Height = 32,
+                Margin = new Padding(8, 16, 8, 8),
+                Anchor = AnchorStyles.Right
+            };
             btnUpdateAtkSprites = new Button
             {
                 Text = "Update Atk Sprites",
@@ -112,6 +122,7 @@ namespace OmnipetModuleEditor.Tabs
                 AutoSize = true
             };
             bottomPanel.Controls.Add(btnFastEditor);
+            bottomPanel.Controls.Add(btnSpecialEncounters);
             bottomPanel.Controls.Add(btnUpdateAtkSprites);
 
             rightPanel.Controls.Add(enemyEditPanel);
@@ -370,7 +381,8 @@ namespace OmnipetModuleEditor.Tabs
                 Unlock = enemy.Unlock,
                 AtkMain = enemy.AtkMain,
                 AtkAlt = enemy.AtkAlt,
-                AtkAlt2 = enemy.AtkAlt2
+                AtkAlt2 = enemy.AtkAlt2,
+                SpecialEncounter = enemy.SpecialEncounter
             };
         }
 
@@ -382,7 +394,10 @@ namespace OmnipetModuleEditor.Tabs
             if (enemies == null) return;
             enemies.Sort((a, b) =>
             {
-                int cmp = a.Version.CompareTo(b.Version);
+                // Special encounters sort before normal battles
+                int cmp = b.SpecialEncounter.CompareTo(a.SpecialEncounter);
+                if (cmp != 0) return cmp;
+                cmp = a.Version.CompareTo(b.Version);
                 if (cmp != 0) return cmp;
                 cmp = a.Area.CompareTo(b.Area);
                 if (cmp != 0) return cmp;
@@ -398,11 +413,32 @@ namespace OmnipetModuleEditor.Tabs
         {
             var fastEditor = new EnemyFastEditorForm();
             fastEditor.SetModulePath(this.modulePath);
-            fastEditor.SetEnemies(this.enemies);
+            fastEditor.SetEnemies(enemies.Where(en => !en.SpecialEncounter).ToList());
 
-            fastEditor.EnemiesSaved += (newEnemies) =>
+            fastEditor.EnemiesSaved += (normalEnemies) =>
             {
-                this.enemies = newEnemies;
+                var specials = enemies.Where(en => en.SpecialEncounter).ToList();
+                enemies = specials.Concat(normalEnemies).ToList();
+                SortEnemies();
+                PopulateEnemyPanel();
+                Save();
+            };
+
+            fastEditor.ShowDialog();
+        }
+
+        private void BtnSpecialEncounters_Click(object sender, EventArgs e)
+        {
+            var fastEditor = new EnemyFastEditorForm();
+            fastEditor.SetSpecialEncounterMode(true);
+            fastEditor.SetModulePath(this.modulePath);
+            fastEditor.SetEnemies(enemies.Where(en => en.SpecialEncounter).ToList());
+
+            fastEditor.EnemiesSaved += (specialEnemies) =>
+            {
+                var normals = enemies.Where(en => !en.SpecialEncounter).ToList();
+                enemies = normals.Concat(specialEnemies).ToList();
+                SortEnemies();
                 PopulateEnemyPanel();
                 Save();
             };
@@ -756,7 +792,8 @@ namespace OmnipetModuleEditor.Tabs
             private TextBox TxtUnlock;
             private ComboBox CmbAtkMain;
             private ComboBox CmbAtkAlt;
-            private ComboBox CmbAtkAlt2;  // NEW: ATK Alt 2
+            private ComboBox CmbAtkAlt2;
+            private CheckBox ChkSpecialEncounter;
             private Dictionary<int, Image> atkSprites = new Dictionary<int, Image>();
             private Dictionary<int, Image> atkCritSprites = new Dictionary<int, Image>();
 
@@ -777,90 +814,106 @@ namespace OmnipetModuleEditor.Tabs
                     Padding = new Padding(8)
                 };
 
-                // Campos de edi��o (com limite de largura)
+                // 4-column layout: label | control | label | control
                 var fieldsPanel = new TableLayoutPanel
                 {
                     Dock = DockStyle.Fill,
-                    ColumnCount = 2,
+                    ColumnCount = 4,
                     Padding = new Padding(0, 8, 0, 0),
                     AutoScroll = true
                 };
                 fieldsPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 100F));
-                fieldsPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 220F));
+                fieldsPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 185F));
+                fieldsPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 115F));
+                fieldsPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 185F));
+                for (int i = 0; i < 9; i++)
+                    fieldsPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
-                int row = 0;
-                void AddField(string label, Control control)
+                // colPair 0 → columns 0+1 (left), colPair 1 → columns 2+3 (right)
+                void AddField(string label, Control control, int colPair, int rowIdx)
                 {
                     var lbl = new Label
                     {
                         Text = label,
                         TextAlign = ContentAlignment.MiddleRight,
                         AutoSize = false,
-                        Width = 100,
+                        Width = colPair == 0 ? 100 : 115,
                         Anchor = AnchorStyles.Right,
                         Margin = new Padding(0, 2, 4, 2)
                     };
-
-                    control.Width = 200;
-                    control.MaximumSize = new Size(200, 0);
+                    if (!(control is CheckBox))
+                    {
+                        control.Width = 175;
+                        control.MaximumSize = new Size(175, 0);
+                    }
                     control.Anchor = AnchorStyles.Left;
                     control.Margin = new Padding(0, 2, 8, 2);
-
-                    fieldsPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-                    fieldsPanel.Controls.Add(lbl, 0, row);
-                    fieldsPanel.Controls.Add(control, 1, row);
-                    row++;
+                    fieldsPanel.Controls.Add(lbl, colPair * 2, rowIdx);
+                    fieldsPanel.Controls.Add(control, colPair * 2 + 1, rowIdx);
                 }
 
-                TxtName = new TextBox();
-                NumPower = new NumericUpDown { Minimum = 1, Maximum = 999999, Value = 10 };
-                CmbStage = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList };
+                // --- Column 1 controls ---
+                TxtName      = new TextBox();
+                CmbStage     = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList };
                 CmbStage.Items.AddRange(Enum.GetNames(typeof(OmnipetModuleEditor.Models.StageEnum)));
                 CmbAttribute = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList };
                 CmbAttribute.Items.AddRange(new object[] { "Free", "Data", "Virus", "Vaccine" });
-                NumHp = new NumericUpDown { Minimum = 0, Maximum = 999999, Value = 1 };
-                NumArea = new NumericUpDown { Minimum = 1, Maximum = 999999, Value = 1 };
-                NumRound = new NumericUpDown { Minimum = 1, Maximum = 999999, Value = 1 };
-                NumVersion = new NumericUpDown { Minimum = 0, Maximum = 999999, Value = 1 };
-                NumHandicap = new NumericUpDown { Minimum = 0, Maximum = 999999, Value = 0 };
-                CmbPrize = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList };
-                TxtUnlock = new TextBox();
-                CmbAtkMain = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList };
-                CmbAtkAlt  = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList };
-                CmbAtkAlt2 = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList };
-                CmbAtkMain.DrawMode  = DrawMode.OwnerDrawFixed; CmbAtkMain.ItemHeight  = 36; CmbAtkMain.DrawItem  += AtkCombo_DrawItem;
-                CmbAtkAlt.DrawMode   = DrawMode.OwnerDrawFixed; CmbAtkAlt.ItemHeight   = 36; CmbAtkAlt.DrawItem   += AtkCombo_DrawItem;
-                CmbAtkAlt2.DrawMode  = DrawMode.OwnerDrawFixed; CmbAtkAlt2.ItemHeight  = 36; CmbAtkAlt2.DrawItem  += AtkCombo_DrawItem;
+                NumPower     = new NumericUpDown { Minimum = 1, Maximum = 999999, Value = 10 };
+                NumHandicap  = new NumericUpDown { Minimum = 0, Maximum = 999999, Value = 0 };
+                CmbAtkMain   = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList };
+                CmbAtkAlt    = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList };
+                CmbAtkAlt2   = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList };
+                CmbAtkMain.DrawMode = DrawMode.OwnerDrawFixed; CmbAtkMain.ItemHeight = 36; CmbAtkMain.DrawItem += AtkCombo_DrawItem;
+                CmbAtkAlt.DrawMode  = DrawMode.OwnerDrawFixed; CmbAtkAlt.ItemHeight  = 36; CmbAtkAlt.DrawItem  += AtkCombo_DrawItem;
+                CmbAtkAlt2.DrawMode = DrawMode.OwnerDrawFixed; CmbAtkAlt2.ItemHeight = 36; CmbAtkAlt2.DrawItem += AtkCombo_DrawItem;
 
-                AddField("Name:", TxtName);
-                AddField("Power:", NumPower);
-                AddField("Stage:", CmbStage);
-                AddField("Attribute:", CmbAttribute);
-                AddField("HP:", NumHp);
-                AddField("Area:", NumArea);
-                AddField("Round:", NumRound);
-                AddField("Version:", NumVersion);
-                AddField("Handicap:", NumHandicap);
-                AddField("Prize:", CmbPrize);
-                AddField("Unlock:", TxtUnlock);
-                AddField("Main Attack:", CmbAtkMain);
-                AddField("Alt Attack:", CmbAtkAlt);
-                AddField("Alt Attack 2:", CmbAtkAlt2);  // NEW: Add field to layout
+                // --- Column 2 controls ---
+                NumVersion   = new NumericUpDown { Minimum = 0, Maximum = 999999, Value = 1 };
+                NumArea      = new NumericUpDown { Minimum = 1, Maximum = 999999, Value = 1 };
+                NumRound     = new NumericUpDown { Minimum = 1, Maximum = 999999, Value = 1 };
+                ChkSpecialEncounter = new CheckBox { Checked = false, AutoSize = true };
+                ChkSpecialEncounter.CheckedChanged += (s, e) =>
+                {
+                    if (ChkSpecialEncounter.Checked) NumRound.Value = 1;
+                    NumRound.Enabled = !ChkSpecialEncounter.Checked;
+                };
+                NumHp        = new NumericUpDown { Minimum = 0, Maximum = 999999, Value = 1 };
+                CmbPrize     = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList };
+                TxtUnlock    = new TextBox();
 
+                // --- Left column: Name, Stage, Attribute, Power, Handicap, Main Attack, Alt Attack, Crit Attack ---
+                AddField("Name:",        TxtName,      0, 0);
+                AddField("Stage:",       CmbStage,     0, 1);
+                AddField("Attribute:",   CmbAttribute, 0, 2);
+                AddField("Power:",       NumPower,     0, 3);
+                AddField("Handicap:",    NumHandicap,  0, 4);
+                AddField("Main Attack:", CmbAtkMain,   0, 5);
+                AddField("Alt Attack:",  CmbAtkAlt,    0, 6);
+                AddField("Crit Attack:", CmbAtkAlt2,   0, 7);
+
+                // --- Right column: Version, Area, Round, Sp. Encounter, Prize, Unlock, HP ---
+                AddField("Version:",       NumVersion,          1, 0);
+                AddField("Area:",          NumArea,             1, 1);
+                AddField("Round:",         NumRound,            1, 2);
+                AddField("Sp. Encounter:", ChkSpecialEncounter, 1, 3);
+                AddField("Prize:",         CmbPrize,            1, 4);
+                AddField("Unlock:",        TxtUnlock,           1, 5);
+                AddField("HP:",            NumHp,               1, 6);
+
+                // Save/Cancel buttons span all 4 columns
                 var buttonPanel = new FlowLayoutPanel
                 {
                     Dock = DockStyle.Top,
                     FlowDirection = FlowDirection.LeftToRight,
                     AutoSize = true
                 };
-                var btnSave = new Button { Text = "Save", Width = 80, Margin = new Padding(8, 8, 8, 8) };
+                var btnSave   = new Button { Text = "Save",   Width = 80, Margin = new Padding(8, 8, 8, 8) };
                 var btnCancel = new Button { Text = "Cancel", Width = 80, Margin = new Padding(8, 8, 8, 8) };
                 buttonPanel.Controls.Add(btnSave);
                 buttonPanel.Controls.Add(btnCancel);
-                fieldsPanel.Controls.Add(buttonPanel, 0, row++);
-                fieldsPanel.SetColumnSpan(buttonPanel, 2);
+                fieldsPanel.Controls.Add(buttonPanel, 0, 8);
+                fieldsPanel.SetColumnSpan(buttonPanel, 4);
 
-                // Eventos dos bot�es
                 btnSave.Click += (s, e) =>
                 {
                     var battleTab = GetBattleTab();
@@ -877,16 +930,11 @@ namespace OmnipetModuleEditor.Tabs
                 btnCancel.Click += (s, e) =>
                 {
                     if (Parent is TableLayoutPanel parentLayout && parentLayout.Parent is BattleTab battleTab)
-                    {
-                        // Recarrega os dados do objeto selecionado
                         battleTab.enemyEditPanel.LoadEnemy(battleTab.selectedEnemy);
-                    }
                 };
 
                 rightLayout.Controls.Add(fieldsPanel, 0, 0);
                 this.Controls.Add(rightLayout);
-
-                // Aqui voc� pode adicionar eventos aos bot�es, se desejar.
             }
 
             private BattleTab GetBattleTab()
@@ -925,6 +973,8 @@ namespace OmnipetModuleEditor.Tabs
                 CmbAtkMain.SelectedIndex = FindAtkComboIndex(CmbAtkMain, enemy.AtkMain);
                 CmbAtkAlt.SelectedIndex = FindAtkComboIndex(CmbAtkAlt, enemy.AtkAlt);
                 CmbAtkAlt2.SelectedIndex = FindAtkComboIndex(CmbAtkAlt2, enemy.AtkAlt2);
+                ChkSpecialEncounter.Checked = enemy.SpecialEncounter;
+                NumRound.Enabled = !enemy.SpecialEncounter;
             }
 
             public void SaveToEnemy(BattleEnemy enemy)
@@ -944,6 +994,8 @@ namespace OmnipetModuleEditor.Tabs
                 enemy.AtkMain = (CmbAtkMain.SelectedItem as AtkComboItem)?.Number ?? 0;
                 enemy.AtkAlt = (CmbAtkAlt.SelectedItem as AtkComboItem)?.Number ?? 0;
                 enemy.AtkAlt2 = (CmbAtkAlt2.SelectedItem as AtkComboItem)?.Number ?? 0;
+                enemy.SpecialEncounter = ChkSpecialEncounter.Checked;
+                if (enemy.SpecialEncounter) enemy.Round = 1;
             }
 
             public void LoadAtkSprites(string modulePath, string primaryFormat = null)
@@ -1136,9 +1188,12 @@ namespace OmnipetModuleEditor.Tabs
             var enemy    = _items[index];
             int y        = index * ItemHeight - scrollY;
             bool sel     = index == _selectedIndex;
+            bool special = enemy.SpecialEncounter;
             int w        = ClientSize.Width;
 
-            using (var bg = new SolidBrush(sel ? Color.LightBlue : Color.White))
+            Color bgNormal = special ? Color.FromArgb(255, 243, 205) : Color.White;
+            Color bgSel    = special ? Color.FromArgb(255, 214, 102) : Color.LightBlue;
+            using (var bg = new SolidBrush(sel ? bgSel : bgNormal))
                 g.FillRectangle(bg, 0, y, w, ItemHeight);
 
             using (var ab = new SolidBrush(AttrColor(enemy.Attribute ?? "")))
@@ -1149,13 +1204,16 @@ namespace OmnipetModuleEditor.Tabs
                 _spriteCache.TryGetValue(enemy.Name, out var sprite) && sprite != null)
                 g.DrawImage(sprite, new Rectangle(4, y + 4, 48, 48));
 
+            string infoText = special
+                ? string.Format("Ver. {0} | Stage {1} | Area {2} | Special Encounter",
+                    enemy.Version, enemy.Stage, enemy.Area)
+                : string.Format("Ver. {0} | Stage {1} | Area {2} | Round {3}",
+                    enemy.Version, enemy.Stage, enemy.Area, enemy.Round);
+
             using (var tb = new SolidBrush(Color.DeepSkyBlue))
             {
                 g.DrawString(enemy.Name ?? "", _nameFont, tb, 60, y + 4);
-                g.DrawString(
-                    string.Format("Ver. {0} | Stage {1} | Area {2} | Round {3}",
-                        enemy.Version, enemy.Stage, enemy.Area, enemy.Round),
-                    _infoFont, tb, 60, y + 30);
+                g.DrawString(infoText, _infoFont, tb, 60, y + 30);
             }
 
             g.DrawLine(Pens.LightGray, 0, y + ItemHeight - 1, w, y + ItemHeight - 1);

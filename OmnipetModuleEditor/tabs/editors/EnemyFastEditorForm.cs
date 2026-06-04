@@ -34,8 +34,20 @@ namespace OmnipetModuleEditor
         // State
         private int selectedVersion = -1;
         private int selectedStage = -1;
+        private bool _specialEncounterMode = false;
         private readonly List<AreaGrid> areaGrids = new List<AreaGrid>();
         private readonly List<string> itemList = new List<string>();
+
+        /// <summary>
+        /// Switches the editor into Special Encounter mode: only 1 round per area is allowed
+        /// and all saved enemies are marked as special encounters.
+        /// Must be called before SetModulePath.
+        /// </summary>
+        public void SetSpecialEncounterMode(bool special)
+        {
+            _specialEncounterMode = special;
+            Text = special ? "Special Encounters Fast Editor" : "Fast Enemy Editor";
+        }
 
         /// <summary>
         /// Initializes a new instance of the <see cref="EnemyFastEditorForm"/> class.
@@ -222,7 +234,7 @@ namespace OmnipetModuleEditor
             int idx = tabAreas.TabPages.Count + 1;
             var page = new TabPage($"Area {idx}");
 
-            var grid = new AreaGrid(GetModuleVersions(), module, modulePath, itemList, idx);
+            var grid = new AreaGrid(GetModuleVersions(), module, modulePath, itemList, idx, _specialEncounterMode);
             areaGrids.Add(grid);
 
             grid.Panel.Dock = DockStyle.Fill;
@@ -433,18 +445,20 @@ namespace OmnipetModuleEditor
             private readonly string modulePath;
             private List<string> itemList;
             private readonly int areaIndex;
+            private readonly bool specialEncounterMode;
 
             private int columnCount = 1;
             private List<TextBox> unlockBoxes = new List<TextBox>();
             private List<ComboBox> itemCombos = new List<ComboBox>();
 
-            public AreaGrid(List<int> versions, Module module, string modulePath, List<string> items, int areaIdx)
+            public AreaGrid(List<int> versions, Module module, string modulePath, List<string> items, int areaIdx, bool specialEncounterMode = false)
             {
                 this.versions = versions;
                 this.module = module;
                 this.modulePath = modulePath;
                 this.itemList = items ?? new List<string>();
                 areaIndex = areaIdx;
+                this.specialEncounterMode = specialEncounterMode;
                 enemiesByVersion = versions.Select(_ => new List<BattleEnemy>()).ToList();
 
                 Panel = new Panel { Dock = DockStyle.Fill, AutoScroll = true };
@@ -595,7 +609,8 @@ namespace OmnipetModuleEditor
                 AtkMain = p.AtkMain,
                 AtkAlt = p.AtkAlt,
                 Area = area,
-                Round = round
+                Round = specialEncounterMode ? 1 : round,
+                SpecialEncounter = specialEncounterMode
             };
 
             /// <summary>
@@ -700,9 +715,19 @@ namespace OmnipetModuleEditor
                 int vIdx = versions.IndexOf(pet.Version);
                 if (vIdx < 0) return;
 
-                int col = enemiesByVersion[vIdx].FindIndex(b => b == null);
-                if (col == -1) col = enemiesByVersion[vIdx].Count;
-                if (col == columnCount) AddColumn();
+                int col;
+                if (specialEncounterMode)
+                {
+                    // Special encounters: always round 1, replace any existing entry
+                    col = 0;
+                }
+                else
+                {
+                    col = enemiesByVersion[vIdx].FindIndex(b => b == null);
+                    if (col == -1) col = enemiesByVersion[vIdx].Count;
+                    if (col == columnCount) AddColumn();
+                }
+
                 while (enemiesByVersion[vIdx].Count <= col) enemiesByVersion[vIdx].Add(null);
 
                 var be = CreateBattleEnemyFromPet(pet, areaIndex, col + 1);

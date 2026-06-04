@@ -894,7 +894,7 @@ namespace OmnipetModuleEditor.Tabs
                 AddField("Wakes:", TxtWakes);
                 AddField("ATK Alt:", CmbAtkAlt);
                 AddField("Power:", NumPower);
-                AddField("ATK Alt 2:", CmbAtkAlt2);
+                AddField("Crit Attack:", CmbAtkAlt2);
                 AddField("HP:", NumHp);
                 AddField("Hunger Loss:", NumHungerLoss);
                 AddField("Stomach:", NumStomach);

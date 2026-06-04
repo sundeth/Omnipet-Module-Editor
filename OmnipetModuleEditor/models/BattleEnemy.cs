@@ -43,4 +43,7 @@ public class BattleEnemy
 
     [JsonPropertyName("stage")]
     public int Stage { get; set; }
+
+    [JsonPropertyName("special_encounter")]
+    public bool SpecialEncounter { get; set; }
 }

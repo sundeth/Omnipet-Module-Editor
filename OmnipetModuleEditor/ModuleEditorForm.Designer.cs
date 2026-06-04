@@ -11,6 +11,7 @@
         private System.Windows.Forms.Panel panelBottom;
         private System.Windows.Forms.Button buttonSave;
         private System.Windows.Forms.Button buttonReport;
+        private System.Windows.Forms.Button buttonExport;
         private System.Windows.Forms.Button buttonCancel;
         private System.Windows.Forms.Button buttonGenerateDoc;
         private System.Windows.Forms.Button buttonOpenDoc;
@@ -42,6 +43,7 @@
             this.panelBottom = new System.Windows.Forms.Panel();
             this.buttonSave = new System.Windows.Forms.Button();
             this.buttonReport = new System.Windows.Forms.Button();
+            this.buttonExport = new System.Windows.Forms.Button();
             this.buttonCancel = new System.Windows.Forms.Button();
             this.buttonGenerateDoc = new System.Windows.Forms.Button();
             this.buttonOpenDoc = new System.Windows.Forms.Button();
@@ -67,6 +69,7 @@
             this.panelBottom.Controls.Add(this.buttonOpenDoc);
             this.panelBottom.Controls.Add(this.buttonAccount);
             this.panelBottom.Controls.Add(this.buttonPublish);
+            this.panelBottom.Controls.Add(this.buttonExport);
             this.panelBottom.Controls.Add(this.buttonReport);
             this.panelBottom.Controls.Add(this.buttonSave);
             this.panelBottom.Controls.Add(this.buttonCancel);
@@ -136,6 +139,18 @@
             this.buttonReport.Text = "Report";
             this.buttonReport.UseVisualStyleBackColor = true;
             this.buttonReport.Click += new System.EventHandler(this.buttonReport_Click);
+            // 
+            // buttonExport
+            // 
+            this.buttonExport.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right)));
+            this.buttonExport.Location = new System.Drawing.Point(781, 12);
+            this.buttonExport.Margin = new System.Windows.Forms.Padding(2, 2, 2, 2);
+            this.buttonExport.Name = "buttonExport";
+            this.buttonExport.Size = new System.Drawing.Size(80, 24);
+            this.buttonExport.TabIndex = 7;
+            this.buttonExport.Text = "Export";
+            this.buttonExport.UseVisualStyleBackColor = true;
+            this.buttonExport.Click += new System.EventHandler(this.buttonExport_Click);
             // 
             // buttonSave
             // 
