@@ -32,6 +32,9 @@ namespace OmnipetModuleEditor.Tabs
         /// <summary>
         /// Initializes a new instance of the <see cref="PetTab"/> class.
         /// </summary>
+        private int lastSearchIndex = -1;
+        private string lastSearchText = "";
+
         public PetTab()
         {
             InitializeComponent();
@@ -39,6 +42,10 @@ namespace OmnipetModuleEditor.Tabs
             petListPanel.BtnCopy.Click += BtnCopy_Click;
             petListPanel.BtnPaste.Click += BtnPaste_Click;
             petListPanel.BtnAdd.Click += BtnAdd_Click;
+            petListPanel.BtnGo.Click += (s, e) => SearchGo();
+            petListPanel.BtnPrev.Click += (s, e) => SearchPrevNext(-1);
+            petListPanel.BtnNext.Click += (s, e) => SearchPrevNext(1);
+            petListPanel.TxtSearch.KeyDown += (s, e) => { if (e.KeyCode == Keys.Enter) { SearchGo(); e.SuppressKeyPress = true; } };
         }
 
         #region Initialization
@@ -105,9 +112,41 @@ namespace OmnipetModuleEditor.Tabs
             this.modulePath = modulePath;
             this.module = module;
             pets = PetUtils.LoadPetsFromJson(modulePath);
-            petEditPanel.LoadAtkSprites(modulePath);
+            petEditPanel.LoadAtkSprites(modulePath, module?.PrimarySpriteFormat);
             petEditPanel.PopulateAtkCombos();
             PopulatePetPanel();
+        }
+
+        /// <summary>
+        /// Updates the module sprite format and refreshes the pet list thumbnails and the
+        /// currently selected pet's sprite panel.
+        /// </summary>
+        public void RefreshSpriteFormat(Module updatedModule)
+        {
+            this.module = updatedModule;
+
+            // Reload attack sprites with the updated format
+            petEditPanel.LoadAtkSprites(modulePath, updatedModule?.PrimarySpriteFormat);
+            petEditPanel.PopulateAtkCombos();
+
+            // Repopulate the list to refresh thumbnails (preserve scroll via BeginInvoke)
+            if (selectedPet != null)
+            {
+                var panel = PopulatePetPanelAndReturnPanel(selectedPet);
+                if (panel != null)
+                    SelectPetPanel(panel);
+            }
+            else
+            {
+                PopulatePetPanel();
+            }
+
+            // Refresh the sprite panel for the selected pet
+            if (selectedPet != null)
+            {
+                spritePanel.CurrentModule = updatedModule;
+                spritePanel.RefreshSprites();
+            }
         }
 
         /// <summary>
@@ -149,20 +188,27 @@ namespace OmnipetModuleEditor.Tabs
         /// </summary>
         private void PopulatePetPanel()
         {
-            var scrollPos = petListPanel.PanelPetList.AutoScrollPosition;
+            int savedScrollY = -petListPanel.PanelPetList.AutoScrollPosition.Y;
+
+            petListPanel.PanelPetList.AutoScrollPosition = new Point(0, 0);
+            petListPanel.PanelPetList.SuspendLayout();
             petListPanel.PanelPetList.Controls.Clear();
             int y = 0;
-            
-            // Sort pets using the same logic as PetUtils.SortPets
+
             var sortedPets = GetSortedPets();
-            
+
             foreach (var pet in sortedPets)
             {
                 var petPanel = CreatePetPanel(pet, y);
                 petListPanel.PanelPetList.Controls.Add(petPanel);
                 y += 56;
             }
-            petListPanel.PanelPetList.AutoScrollPosition = new Point(-scrollPos.X, -scrollPos.Y);
+            petListPanel.PanelPetList.AutoScrollMinSize = new Size(0, y);
+            petListPanel.PanelPetList.ResumeLayout(true);
+
+            var listPanel = petListPanel.PanelPetList;
+            if (IsHandleCreated && savedScrollY > 0)
+                BeginInvoke(new Action(() => listPanel.AutoScrollPosition = new Point(0, savedScrollY)));
         }
 
         /// <summary>
@@ -170,14 +216,16 @@ namespace OmnipetModuleEditor.Tabs
         /// </summary>
         internal Panel PopulatePetPanelAndReturnPanel(Pet petToSelect = null)
         {
-            var scrollPos = petListPanel.PanelPetList.AutoScrollPosition;
+            int savedScrollY = -petListPanel.PanelPetList.AutoScrollPosition.Y;
+
+            petListPanel.PanelPetList.AutoScrollPosition = new Point(0, 0);
+            petListPanel.PanelPetList.SuspendLayout();
             petListPanel.PanelPetList.Controls.Clear();
             int y = 0;
             Panel selected = null;
-            
-            // Sort pets using the same logic as PetUtils.SortPets
+
             var sortedPets = GetSortedPets();
-            
+
             foreach (var pet in sortedPets)
             {
                 var petPanel = CreatePetPanel(pet, y);
@@ -186,7 +234,13 @@ namespace OmnipetModuleEditor.Tabs
                     selected = petPanel;
                 y += 56;
             }
-            petListPanel.PanelPetList.AutoScrollPosition = new Point(-scrollPos.X, -scrollPos.Y);
+            petListPanel.PanelPetList.AutoScrollMinSize = new Size(0, y);
+            petListPanel.PanelPetList.ResumeLayout(true);
+
+            var listPanel = petListPanel.PanelPetList;
+            if (IsHandleCreated && savedScrollY > 0)
+                BeginInvoke(new Action(() => listPanel.AutoScrollPosition = new Point(0, savedScrollY)));
+
             return selected;
         }
 
@@ -392,6 +446,56 @@ namespace OmnipetModuleEditor.Tabs
             }
         }
 
+        private void SearchGo()
+        {
+            string query = petListPanel.TxtSearch.Text;
+            if (string.IsNullOrWhiteSpace(query)) return;
+            lastSearchText = query;
+            lastSearchIndex = -1;
+            SearchPrevNext(1);
+        }
+
+        private void SearchPrevNext(int direction)
+        {
+            string query = petListPanel.TxtSearch.Text;
+            if (string.IsNullOrWhiteSpace(query)) return;
+
+            var controls = petListPanel.PanelPetList.Controls;
+            int count = controls.Count;
+            if (count == 0) return;
+
+            // If search text changed, reset
+            if (!string.Equals(query, lastSearchText, StringComparison.OrdinalIgnoreCase))
+            {
+                lastSearchText = query;
+                lastSearchIndex = -1;
+            }
+
+            int start = lastSearchIndex + direction;
+            for (int i = 0; i < count; i++)
+            {
+                int idx = ((start + i * direction) % count + count) % count;
+                var panel = controls[idx] as Panel;
+                if (panel?.Tag is Pet pet && pet.Name != null
+                    && pet.Name.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    lastSearchIndex = idx;
+                    SelectPetPanel(panel);
+                    ScrollToPanel(panel);
+                    return;
+                }
+            }
+        }
+
+        private void ScrollToPanel(Panel panel)
+        {
+            var listPanel = petListPanel.PanelPetList;
+            // panel.Top is relative to the visible client area (affected by current scroll).
+            // Virtual absolute Y = panel.Top - AutoScrollPosition.Y  (AutoScrollPosition.Y is negative when scrolled down)
+            int virtualY = panel.Top - listPanel.AutoScrollPosition.Y;
+            listPanel.AutoScrollPosition = new Point(0, virtualY);
+        }
+
         #endregion
 
         #region Internal Classes
@@ -404,6 +508,10 @@ namespace OmnipetModuleEditor.Tabs
             public Button BtnRemove { get; private set; }
             public Button BtnCopy { get; private set; }
             public Button BtnPaste { get; private set; }
+            public TextBox TxtSearch { get; private set; }
+            public Button BtnGo { get; private set; }
+            public Button BtnPrev { get; private set; }
+            public Button BtnNext { get; private set; }
 
             public PetListPanel()
             {
@@ -417,11 +525,27 @@ namespace OmnipetModuleEditor.Tabs
                 {
                     Dock = DockStyle.Fill,
                     ColumnCount = 1,
-                    RowCount = 2,
+                    RowCount = 3,
                     BackColor = SystemColors.ControlLight
                 };
+                leftLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 30F));
                 leftLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
                 leftLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 40F));
+
+                // Search bar
+                var searchPanel = new FlowLayoutPanel
+                {
+                    Dock = DockStyle.Fill,
+                    FlowDirection = FlowDirection.LeftToRight,
+                    Padding = new Padding(2, 2, 2, 0),
+                    WrapContents = false
+                };
+                TxtSearch = new TextBox { Width = 130, Margin = new Padding(0, 2, 2, 0) };
+                BtnGo = new Button { Text = "Go", Width = 36, Height = 23, Margin = new Padding(0, 1, 2, 0) };
+                BtnPrev = new Button { Text = "<", Width = 28, Height = 23, Margin = new Padding(0, 1, 2, 0) };
+                BtnNext = new Button { Text = ">", Width = 28, Height = 23, Margin = new Padding(0, 1, 0, 0) };
+                searchPanel.Controls.AddRange(new Control[] { TxtSearch, BtnGo, BtnPrev, BtnNext });
+                leftLayout.Controls.Add(searchPanel, 0, 0);
 
                 PanelPetList = new Panel
                 {
@@ -429,7 +553,7 @@ namespace OmnipetModuleEditor.Tabs
                     AutoScroll = true,
                     BackColor = Color.White
                 };
-                leftLayout.Controls.Add(PanelPetList, 0, 0);
+                leftLayout.Controls.Add(PanelPetList, 0, 1);
 
                 var panelButtons = new FlowLayoutPanel
                 {
@@ -447,7 +571,7 @@ namespace OmnipetModuleEditor.Tabs
                 BtnPaste = new Button { Text = "Paste", Width = 70, Margin = new Padding(0, 0, 4, 0) };
 
                 panelButtons.Controls.AddRange(new Control[] { BtnAdd, BtnRemove, BtnCopy, BtnPaste });
-                leftLayout.Controls.Add(panelButtons, 0, 1);
+                leftLayout.Controls.Add(panelButtons, 0, 2);
 
                 this.Controls.Add(leftLayout);
             }
@@ -503,6 +627,7 @@ namespace OmnipetModuleEditor.Tabs
             // private List<Panel> spriteBoxes = new List<Panel>();
 
             private Dictionary<int, Image> atkSprites = new Dictionary<int, Image>();
+            private Dictionary<int, Image> atkCritSprites = new Dictionary<int, Image>();
 
             private Button btnEditEvolutions;
             
@@ -520,6 +645,16 @@ namespace OmnipetModuleEditor.Tabs
             public void SetOwner(PetTab petTab)
             {
                 ownerPetTab = petTab;
+            }
+
+            private int FindAtkComboIndex(ComboBox cmb, int number)
+            {
+                for (int i = 0; i < cmb.Items.Count; i++)
+                {
+                    if (cmb.Items[i] is AtkComboItem item && item.Number == number)
+                        return i;
+                }
+                return 0;
             }
 
             public void LoadPet(Pet pet)
@@ -550,9 +685,9 @@ namespace OmnipetModuleEditor.Tabs
                 TxtSleeps.Text = NormalizeTime(pet.Sleeps);
                 TxtWakes.Text = NormalizeTime(pet.Wakes);
 
-                CmbAtkMain.SelectedIndex = Math.Max(0, Math.Min(pet.AtkMain, 300));
-                CmbAtkAlt.SelectedIndex = Math.Max(0, Math.Min(pet.AtkAlt, 300));
-                CmbAtkAlt2.SelectedIndex = Math.Max(0, Math.Min(pet.AtkAlt2, 300));
+                CmbAtkMain.SelectedIndex = FindAtkComboIndex(CmbAtkMain, pet.AtkMain);
+                CmbAtkAlt.SelectedIndex = FindAtkComboIndex(CmbAtkAlt, pet.AtkAlt);
+                CmbAtkAlt2.SelectedIndex = FindAtkComboIndex(CmbAtkAlt2, pet.AtkAlt2);
                 NumTime.Value = Math.Max(NumTime.Minimum, pet.Time);
                 NumPoopTimer.Value = Math.Max(NumPoopTimer.Minimum, pet.PoopTimer);
                 NumEnergy.Value = Math.Max(NumEnergy.Minimum, pet.Energy);
@@ -609,9 +744,9 @@ namespace OmnipetModuleEditor.Tabs
                 pet.Sleeps = IsValidTime(TxtSleeps.Text) ? TxtSleeps.Text : null;
                 pet.Wakes = IsValidTime(TxtWakes.Text) ? TxtWakes.Text : null;
 
-                pet.AtkMain = CmbAtkMain.SelectedIndex;
-                pet.AtkAlt = CmbAtkAlt.SelectedIndex;
-                pet.AtkAlt2 = CmbAtkAlt2.SelectedIndex;  // NEW: Save AtkAlt2
+                pet.AtkMain = (CmbAtkMain.SelectedItem as AtkComboItem)?.Number ?? 0;
+                pet.AtkAlt = (CmbAtkAlt.SelectedItem as AtkComboItem)?.Number ?? 0;
+                pet.AtkAlt2 = (CmbAtkAlt2.SelectedItem as AtkComboItem)?.Number ?? 0;
                 pet.Time = (int)NumTime.Value;
                 pet.PoopTimer = (int)NumPoopTimer.Value;
                 pet.Energy = (int)NumEnergy.Value;
@@ -759,7 +894,7 @@ namespace OmnipetModuleEditor.Tabs
                 AddField("Wakes:", TxtWakes);
                 AddField("ATK Alt:", CmbAtkAlt);
                 AddField("Power:", NumPower);
-                AddField("ATK Alt 2:", CmbAtkAlt2);
+                AddField("Crit Attack:", CmbAtkAlt2);
                 AddField("HP:", NumHp);
                 AddField("Hunger Loss:", NumHungerLoss);
                 AddField("Stomach:", NumStomach);
@@ -863,18 +998,21 @@ namespace OmnipetModuleEditor.Tabs
                 // Clear and add item 0 (None)
                 CmbAtkMain.Items.Clear();
                 CmbAtkAlt.Items.Clear();
-                CmbAtkAlt2.Items.Clear();  // NEW: Clear ATK Alt 2 combo
+                CmbAtkAlt2.Items.Clear();
                 CmbAtkMain.Items.Add(new AtkComboItem(0, null));
                 CmbAtkAlt.Items.Add(new AtkComboItem(0, null));
-                CmbAtkAlt2.Items.Add(new AtkComboItem(0, null));  // NEW: Add default item to ATK Alt 2
+                CmbAtkAlt2.Items.Add(new AtkComboItem(0, null));
 
-                // Use all available attack sprites instead of hardcoding to 117
                 foreach (var kvp in atkSprites.OrderBy(x => x.Key))
                 {
                     var item = new AtkComboItem(kvp.Key, kvp.Value);
                     CmbAtkMain.Items.Add(item);
                     CmbAtkAlt.Items.Add(item);
-                    CmbAtkAlt2.Items.Add(item);  // NEW: Add to ATK Alt 2 combo
+                }
+
+                foreach (var kvp in atkCritSprites.OrderBy(x => x.Key))
+                {
+                    CmbAtkAlt2.Items.Add(new AtkComboItem(kvp.Key, kvp.Value));
                 }
             }
 
@@ -898,9 +1036,10 @@ namespace OmnipetModuleEditor.Tabs
                 e.DrawFocusRectangle();
             }
 
-            internal void LoadAtkSprites(string modulePath)
+            internal void LoadAtkSprites(string modulePath, string primaryFormat = null)
             {
-                this.atkSprites = PetUtils.LoadAtkSprites(modulePath);
+                this.atkSprites = PetUtils.LoadAtkSprites(modulePath, primaryFormat);
+                this.atkCritSprites = PetUtils.LoadAtkCritSprites(modulePath, primaryFormat);
             }
         }
 

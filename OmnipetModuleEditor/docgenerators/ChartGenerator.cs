@@ -59,7 +59,10 @@ namespace OmnipetModuleEditor.docgenerators
                 sb.AppendLine("</div>");
             }
 
-            string content = template.Replace("#EVOLUTIONCHARTS", sb.ToString());
+            string primaryFormat = (module?.PrimarySpriteFormat ?? "Color").ToLower();
+            string content = template
+                .Replace("#EVOLUTIONCHARTS", sb.ToString())
+                .Replace("#PRIMARYSPRITEFORMAT", primaryFormat);
             File.WriteAllText(Path.Combine(docPath, "charts.html"), content);
         }
 
@@ -78,9 +81,10 @@ namespace OmnipetModuleEditor.docgenerators
             {
                 try
                 {
-                    // Use new sprite loading system with high definition support
-                    bool moduleHighDefinitionSprites = module?.HighDefinitionSprites ?? false;
-                    var sprite = SpriteUtils.LoadSingleSprite(petName, modulePath, nameFormat, moduleHighDefinitionSprites);
+                    // Use new sprite loading system with format support
+                    string primary = module?.PrimarySpriteFormat ?? "Color";
+                    string secondary = module?.SecondarySpriteFormat ?? "HD";
+                    var sprite = SpriteUtils.LoadSingleSprite(petName, modulePath, nameFormat, primary, secondary);
                     if (sprite != null)
                     {
                         string safeFileName = GetSafeFileName(petName) + ".png";

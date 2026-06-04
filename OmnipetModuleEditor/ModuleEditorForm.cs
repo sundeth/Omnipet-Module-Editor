@@ -1,9 +1,14 @@
 ﻿using OmnipetModuleEditor.controls;
 using OmnipetModuleEditor.OmniNet;
+using OmnipetModuleEditor.Reports;
 using OmnipetModuleEditor.Tabs;
+using OmnipetModuleEditor.Utils;
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.IO.Compression;
 using System.Reflection;
+using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
@@ -103,6 +108,12 @@ namespace OmnipetModuleEditor
         /// </summary>
         private void buttonSave_Click(object sender, EventArgs e)
         {
+            SaveAll();
+            MessageBox.Show(Properties.Resources.ModuleSaved, Properties.Resources.Save, MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+
+        private void SaveAll()
+        {
             foreach (TabPage tabPage in tabControlMain.TabPages)
             {
                 if (tabPage.Controls.Count > 0)
@@ -115,7 +126,6 @@ namespace OmnipetModuleEditor
                     }
                 }
             }
-            MessageBox.Show(Properties.Resources.ModuleSaved, Properties.Resources.Save, MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
 
         /// <summary>
@@ -150,13 +160,23 @@ namespace OmnipetModuleEditor
             petControl.Dock = DockStyle.Fill;
             petControl.SetModule(currentPath, currentModule);
 
-            var petTab = new TabPage(Properties.Resources.TabPet);
-            petTab.Controls.Add(petControl);
-            tabControlMain.TabPages.Add(petTab);
-
             var battleTabControl = new BattleTab();
             battleTabControl.Dock = DockStyle.Fill;
             battleTabControl.SetModule(currentPath, currentModule);
+
+            // When the sprite format changes in the Module tab, update Pet and Battle tabs immediately
+            // using the live values from the comboboxes (no disk save required)
+            moduleTabControl.SpriteFormatChanged += (s, e) =>
+            {
+                currentModule.PrimarySpriteFormat = moduleTabControl.CurrentPrimaryFormat;
+                currentModule.SecondarySpriteFormat = moduleTabControl.CurrentSecondaryFormat;
+                petControl.RefreshSpriteFormat(currentModule);
+                battleTabControl.RefreshSpriteFormat(currentModule);
+            };
+
+            var petTab = new TabPage(Properties.Resources.TabPet);
+            petTab.Controls.Add(petControl);
+            tabControlMain.TabPages.Add(petTab);
 
             var battleTab = new TabPage(Properties.Resources.TabBattle);
             battleTab.Controls.Add(battleTabControl);
@@ -189,6 +209,198 @@ namespace OmnipetModuleEditor
             catch (Exception ex)
             {
                 MessageBox.Show("Error while generating the documentation:\n" + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        private void buttonOpenDoc_Click(object sender, EventArgs e)
+        {
+            if (string.IsNullOrEmpty(currentPath))
+                return;
+
+            string docPath = Path.Combine(currentPath, "documentation", "index.html");
+            if (File.Exists(docPath))
+            {
+                try
+                {
+                    System.Diagnostics.Process.Start(docPath);
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show("Error opening documentation:\n" + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
+            }
+            else
+            {
+                MessageBox.Show("Documentation not found. Please generate it first.", "Not Found", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+        }
+
+        private void buttonReport_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                // Save current state first so report uses latest data
+                SaveAll();
+
+                // Reload module from disk to get the freshly saved state
+                string moduleFile = Path.Combine(currentPath, "module.json");
+                Models.Module freshModule = currentModule;
+                if (File.Exists(moduleFile))
+                {
+                    try
+                    {
+                        string json = File.ReadAllText(moduleFile);
+                        freshModule = System.Text.Json.JsonSerializer.Deserialize<Models.Module>(json);
+                    }
+                    catch { }
+                }
+
+                var generator = new ModuleReportGenerator(currentPath, freshModule);
+                string report = generator.Generate();
+                var form = new ReportForm(report);
+                form.ShowDialog(this);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Error generating report:\n" + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        // =========================
+        // Export Sprites
+        // =========================
+
+        private void buttonExport_Click(object sender, EventArgs e)
+        {
+            using (var folderDialog = new FolderBrowserDialog())
+            {
+                folderDialog.Description = "Select the folder where sprites will be exported";
+                if (folderDialog.ShowDialog(this) != DialogResult.OK)
+                    return;
+
+                string destRoot = folderDialog.SelectedPath;
+
+                // Determine module name for the output subfolder
+                string moduleName = currentModule?.Name;
+                if (string.IsNullOrWhiteSpace(moduleName))
+                {
+                    MessageBox.Show("The module must have a name before exporting.", "Invalid Module",
+                        MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
+                // Sanitize name so it is safe as a folder name
+                string safeName = string.Concat(moduleName.Split(Path.GetInvalidFileNameChars()));
+                string exportFolder = Path.Combine(destRoot, safeName);
+
+                try
+                {
+                    Directory.CreateDirectory(exportFolder);
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show("Error creating export folder:\n" + ex.Message, "Error",
+                        MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
+                }
+
+                // ── Collect unique sprite names from pets and enemies ──────────────
+                var uniqueNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+                // Pets (monster.json)
+                var pets = PetUtils.LoadPetsFromJson(currentPath);
+                foreach (var pet in pets)
+                    if (!string.IsNullOrWhiteSpace(pet.Name))
+                        uniqueNames.Add(pet.Name);
+
+                // Enemies (battle.json)
+                string battlePath = Path.Combine(currentPath, "battle.json");
+                if (File.Exists(battlePath))
+                {
+                    try
+                    {
+                        string json = File.ReadAllText(battlePath);
+                        using (var doc = JsonDocument.Parse(json))
+                        {
+                            if (doc.RootElement.TryGetProperty("enemies", out var enemiesEl))
+                            {
+                                var enemies = JsonSerializer.Deserialize<List<BattleEnemy>>(enemiesEl.GetRawText());
+                                foreach (var enemy in enemies)
+                                    if (!string.IsNullOrWhiteSpace(enemy.Name))
+                                        uniqueNames.Add(enemy.Name);
+                            }
+                        }
+                    }
+                    catch { /* ignore parse errors – we'll just skip enemies */ }
+                }
+
+                if (uniqueNames.Count == 0)
+                {
+                    MessageBox.Show("No pets or enemies found to export.", "Nothing to Export",
+                        MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                }
+
+                // ── For each unique name, locate the sprite and copy/zip it ───────
+                string nameFormat = currentModule?.NameFormat ?? SpriteUtils.DefaultNameFormat;
+                string primary    = currentModule?.PrimarySpriteFormat   ?? "Color";
+                string secondary  = currentModule?.SecondarySpriteFormat ?? "HD";
+
+                int copied = 0;
+                var missingNames = new List<string>();
+
+                foreach (var name in uniqueNames)
+                {
+                    var result = SpriteUtils.FindSpriteLocation(name, currentPath, nameFormat, primary, secondary);
+
+                    if (string.IsNullOrEmpty(result.LoadedPath))
+                    {
+                        missingNames.Add(name);
+                        continue;
+                    }
+
+                    string sourcePath  = result.LoadedPath;
+                    string folder      = SpriteUtils.GetFolderForFormat(result.LoadedFormat);
+                    string spriteName  = SpriteUtils.GetSpriteName(name, nameFormat);
+                    string targetDir   = Path.Combine(exportFolder, folder);
+                    Directory.CreateDirectory(targetDir);
+                    string targetZip   = Path.Combine(targetDir, spriteName + ".zip");
+
+                    try
+                    {
+                        if (sourcePath.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) && File.Exists(sourcePath))
+                        {
+                            // Already a zip – copy it directly
+                            File.Copy(sourcePath, targetZip, overwrite: true);
+                            copied++;
+                        }
+                        else if (Directory.Exists(sourcePath))
+                        {
+                            // Directory – pack it into a zip
+                            if (File.Exists(targetZip))
+                                File.Delete(targetZip);
+                            ZipFile.CreateFromDirectory(sourcePath, targetZip);
+                            copied++;
+                        }
+                        else
+                        {
+                            missingNames.Add(name);
+                        }
+                    }
+                    catch
+                    {
+                        missingNames.Add(name);
+                    }
+                }
+
+                // ── Report result ─────────────────────────────────────────────────
+                string msg = $"Export complete.\n\nSprites copied: {copied}\nDestination: {exportFolder}";
+                if (missingNames.Count > 0)
+                    msg += $"\n\nNot found ({missingNames.Count}):\n" + string.Join(", ", missingNames);
+
+                MessageBox.Show(msg, "Export",
+                    MessageBoxButtons.OK,
+                    missingNames.Count > 0 ? MessageBoxIcon.Warning : MessageBoxIcon.Information);
             }
         }
 

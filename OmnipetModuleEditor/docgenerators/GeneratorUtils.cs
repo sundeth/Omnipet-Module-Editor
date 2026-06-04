@@ -228,6 +228,7 @@ namespace OmnipetModuleEditor.docgenerators
             <script>
                 // Global variable to store module name format for sprite paths
                 var moduleNameFormat = '$'; // Default format, will be updated when chart loads
+                var modulePrimaryFormat = '#PRIMARYSPRITEFORMAT'; // Injected by generator
                 
                 // Extract module name format from SVG metadata
                 function extractModuleNameFormat() {
@@ -254,25 +255,27 @@ namespace OmnipetModuleEditor.docgenerators
                         callback(null);
                         return;
                     }
-                    
-                    var localPath = '../atk/' + atkId + '.png';
-                    var resourcesPath = '../../resources/atk/' + atkId + '.png';
-                    
-                    var img = new Image();
-                    img.onload = function() {
-                        callback(localPath);
-                    };
-                    img.onerror = function() {
-                        var fallbackImg = new Image();
-                        fallbackImg.onload = function() {
-                            callback(resourcesPath);
-                        };
-                        fallbackImg.onerror = function() {
-                            callback(null); // No sprite found
-                        };
-                        fallbackImg.src = resourcesPath;
-                    };
-                    img.src = localPath;
+
+                    var isDot = modulePrimaryFormat === 'dot';
+                    var paths = [];
+                    if (isDot) {
+                        paths.push('../atk/' + atkId + '_Dot.png');
+                        paths.push('../atk/' + atkId + '.png');
+                        paths.push('../../resources/atk/' + atkId + '_Dot.png');
+                        paths.push('../../resources/atk/' + atkId + '.png');
+                    } else {
+                        paths.push('../atk/' + atkId + '.png');
+                        paths.push('../../resources/atk/' + atkId + '.png');
+                    }
+
+                    function tryNext(index) {
+                        if (index >= paths.length) { callback(null); return; }
+                        var img = new Image();
+                        img.onload = function() { callback(paths[index]); };
+                        img.onerror = function() { tryNext(index + 1); };
+                        img.src = paths[index];
+                    }
+                    tryNext(0);
                 }
                 
                 // Function to adjust tooltip positioning based on modal boundaries

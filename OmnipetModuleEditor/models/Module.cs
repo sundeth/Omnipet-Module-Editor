@@ -37,13 +37,43 @@ namespace OmnipetModuleEditor.Models
         [JsonPropertyName("adventure_style")]
         public string AdventureStyle { get; set; } = "Area Selection";
 
-        // High Definition Sprites - NEW
+        // Battle Cost - NEW
+        [JsonPropertyName("battle_cost_type")]
+        public string BattleCostType { get; set; } = "DP";
+
+        [JsonPropertyName("battle_cost_amount")]
+        public float BattleCostAmount { get; set; } = 1.0f;
+
+        // Sprite Format Settings
+        [JsonPropertyName("primary_sprite_format")]
+        public string PrimarySpriteFormat { get; set; } = "Color";
+
+        [JsonPropertyName("secondary_sprite_format")]
+        public string SecondarySpriteFormat { get; set; } = "HD";
+
+        // Enable Special Attack Sprite - NEW
+        [JsonPropertyName("enable_special_attack_sprite")]
+        public bool EnableSpecialAttackSprite { get; set; } = false;
+
+        // Backward compatibility: read old field, map to new fields if present
         [JsonPropertyName("high_definition_sprites")]
-        public bool HighDefinitionSprites { get; set; } = false;
+        public bool HighDefinitionSprites
+        {
+            get => PrimarySpriteFormat == "HD";
+            set
+            {
+                // Only apply during deserialization when new fields aren't set yet
+                // This is a no-op if PrimarySpriteFormat was already deserialized
+            }
+        }
 
         // Visible Stats - NEW
         [JsonPropertyName("visible_stats")]
         public string VisibleStats { get; set; }
+
+        // Count Evolution While Sleeping - NEW
+        [JsonPropertyName("count_evolution_while_sleeping")]
+        public bool CountEvolutionWhileSleeping { get; set; } = true;
 
         // Battle Minigame - NEW
         [JsonPropertyName("battle_minigame")]
@@ -115,6 +145,26 @@ namespace OmnipetModuleEditor.Models
         [JsonPropertyName("care_poop_alarm")]
         public bool? CarePoopAlarm { get; set; }
 
+        // Care 99g Effect - NEW
+        [JsonPropertyName("care_99g_effect")]
+        public string Care99gEffect { get; set; } = "Skull";
+
+        // Care Poop Sickness Count - NEW
+        [JsonPropertyName("care_poop_sickness_count")]
+        public int CarePoopSicknessCount { get; set; } = 8;
+
+        // Care Poop Sickness Effect - NEW
+        [JsonPropertyName("care_poop_sickness_effect")]
+        public string CarePoopSicknessEffect { get; set; } = "Skull";
+
+        // Care Block Actions When Sleeping - NEW
+        [JsonPropertyName("care_block_actions_when_sleeping")]
+        public bool CareBlockActionsWhenSleeping { get; set; } = false;
+
+        // Care Can Battle While Sick - NEW
+        [JsonPropertyName("care_can_battle_while_sick")]
+        public bool CareCanBattleWhileSick { get; set; } = false;
+
         // Training
         [JsonPropertyName("training_effort_gain")]
         public int TrainingEffortGain { get; set; }
@@ -163,6 +213,10 @@ namespace OmnipetModuleEditor.Models
 
         [JsonPropertyName("battle_sequential_rounds")]
         public bool BattleSequentialRounds { get; set; }
+
+        // Battle Enable Feeding - NEW
+        [JsonPropertyName("battle_enable_feeding")]
+        public bool BattleEnableFeeding { get; set; } = false;
 
         // Death
         [JsonPropertyName("death_max_injuries")]

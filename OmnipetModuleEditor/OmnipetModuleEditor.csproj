@@ -154,6 +154,10 @@
     </Compile>
     <Compile Include="omninet\OmniNetApiClient.cs" />
     <Compile Include="omninet\OmniNetConfig.cs" />
+    <Compile Include="reports\ModuleReportGenerator.cs" />
+    <Compile Include="reports\ReportForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
     <Compile Include="tabs\editors\EnemyFastEditorForm.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -231,53 +235,6 @@
     <EmbeddedResource Include="tabs\PetTab.resx">
       <DependentUpon>PetTab.cs</DependentUpon>
     </EmbeddedResource>
-    <None Include="omninet\Omninet Source Code\.env" />
-    <None Include="omninet\Omninet Source Code\.env.example" />
-    <None Include="omninet\Omninet Source Code\alembic.ini" />
-    <None Include="omninet\Omninet Source Code\alembic\script.py.mako" />
-    <None Include="omninet\Omninet Source Code\alembic\versions\.gitkeep" />
-    <None Include="omninet\Omninet Source Code\client_secret_562180421378-229hhibcg5t883d28dogakuid42umlrs.apps.googleusercontent.com.json" />
-    <None Include="omninet\Omninet Source Code\docker-compose.yml" />
-    <None Include="omninet\Omninet Source Code\Dockerfile" />
-    <None Include="omninet\Omninet Source Code\omninet\models\__pycache__\battle.cpython-310.pyc" />
-    <None Include="omninet\Omninet Source Code\omninet\models\__pycache__\logs.cpython-310.pyc" />
-    <None Include="omninet\Omninet Source Code\omninet\models\__pycache__\module.cpython-310.pyc" />
-    <None Include="omninet\Omninet Source Code\omninet\models\__pycache__\user.cpython-310.pyc" />
-    <None Include="omninet\Omninet Source Code\omninet\models\__pycache__\__init__.cpython-310.pyc" />
-    <None Include="omninet\Omninet Source Code\omninet\routes\__pycache__\admin.cpython-310.pyc" />
-    <None Include="omninet\Omninet Source Code\omninet\routes\__pycache__\auth.cpython-310.pyc" />
-    <None Include="omninet\Omninet Source Code\omninet\routes\__pycache__\battles.cpython-310.pyc" />
-    <None Include="omninet\Omninet Source Code\omninet\routes\__pycache__\deps.cpython-310.pyc" />
-    <None Include="omninet\Omninet Source Code\omninet\routes\__pycache__\modules.cpython-310.pyc" />
-    <None Include="omninet\Omninet Source Code\omninet\routes\__pycache__\seasons.cpython-310.pyc" />
-    <None Include="omninet\Omninet Source Code\omninet\routes\__pycache__\teams.cpython-310.pyc" />
-    <None Include="omninet\Omninet Source Code\omninet\routes\__pycache__\users.cpython-310.pyc" />
-    <None Include="omninet\Omninet Source Code\omninet\routes\__pycache__\__init__.cpython-310.pyc" />
-    <None Include="omninet\Omninet Source Code\omninet\schemas\__pycache__\battle.cpython-310.pyc" />
-    <None Include="omninet\Omninet Source Code\omninet\schemas\__pycache__\common.cpython-310.pyc" />
-    <None Include="omninet\Omninet Source Code\omninet\schemas\__pycache__\module.cpython-310.pyc" />
-    <None Include="omninet\Omninet Source Code\omninet\schemas\__pycache__\user.cpython-310.pyc" />
-    <None Include="omninet\Omninet Source Code\omninet\schemas\__pycache__\__init__.cpython-310.pyc" />
-    <None Include="omninet\Omninet Source Code\omninet\services\__pycache__\auth.cpython-310.pyc" />
-    <None Include="omninet\Omninet Source Code\omninet\services\__pycache__\battle.cpython-310.pyc" />
-    <None Include="omninet\Omninet Source Code\omninet\services\__pycache__\cache.cpython-310.pyc" />
-    <None Include="omninet\Omninet Source Code\omninet\services\__pycache__\device.cpython-310.pyc" />
-    <None Include="omninet\Omninet Source Code\omninet\services\__pycache__\email.cpython-310.pyc" />
-    <None Include="omninet\Omninet Source Code\omninet\services\__pycache__\logging.cpython-310.pyc" />
-    <None Include="omninet\Omninet Source Code\omninet\services\__pycache__\module.cpython-310.pyc" />
-    <None Include="omninet\Omninet Source Code\omninet\services\__pycache__\season.cpython-310.pyc" />
-    <None Include="omninet\Omninet Source Code\omninet\services\__pycache__\security.cpython-310.pyc" />
-    <None Include="omninet\Omninet Source Code\omninet\services\__pycache__\team.cpython-310.pyc" />
-    <None Include="omninet\Omninet Source Code\omninet\services\__pycache__\user.cpython-310.pyc" />
-    <None Include="omninet\Omninet Source Code\omninet\services\__pycache__\__init__.cpython-310.pyc" />
-    <None Include="omninet\Omninet Source Code\omninet\__pycache__\config.cpython-310.pyc" />
-    <None Include="omninet\Omninet Source Code\omninet\__pycache__\database.cpython-310.pyc" />
-    <None Include="omninet\Omninet Source Code\omninet\__pycache__\main.cpython-310.pyc" />
-    <None Include="omninet\Omninet Source Code\omninet\__pycache__\__init__.cpython-310.pyc" />
-    <None Include="omninet\Omninet Source Code\pyproject.toml" />
-    <None Include="omninet\Omninet Source Code\README.md" />
-    <None Include="omninet\Omninet Source Code\run_dev.bat" />
-    <None Include="omninet\Omninet Source Code\run_dev.sh" />
     <None Include="omninet\OmniNetConfig.json" />
     <None Include="template\module.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
@@ -297,46 +254,16 @@
     <None Include="App.config" />
   </ItemGroup>
   <ItemGroup>
+    <Content Include="assets\Burpmon.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="assets\Dots.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="assets\Skull.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
     <Content Include="favicon.ico" />
-    <Content Include="omninet\Omninet Source Code\.gitignore" />
-    <Content Include="omninet\Omninet Source Code\alembic\env.py" />
-    <Content Include="omninet\Omninet Source Code\omninet\config.py" />
-    <Content Include="omninet\Omninet Source Code\omninet\database.py" />
-    <Content Include="omninet\Omninet Source Code\omninet\main.py" />
-    <Content Include="omninet\Omninet Source Code\omninet\models\battle.py" />
-    <Content Include="omninet\Omninet Source Code\omninet\models\logs.py" />
-    <Content Include="omninet\Omninet Source Code\omninet\models\module.py" />
-    <Content Include="omninet\Omninet Source Code\omninet\models\user.py" />
-    <Content Include="omninet\Omninet Source Code\omninet\models\__init__.py" />
-    <Content Include="omninet\Omninet Source Code\omninet\routes\admin.py" />
-    <Content Include="omninet\Omninet Source Code\omninet\routes\auth.py" />
-    <Content Include="omninet\Omninet Source Code\omninet\routes\battles.py" />
-    <Content Include="omninet\Omninet Source Code\omninet\routes\deps.py" />
-    <Content Include="omninet\Omninet Source Code\omninet\routes\modules.py" />
-    <Content Include="omninet\Omninet Source Code\omninet\routes\seasons.py" />
-    <Content Include="omninet\Omninet Source Code\omninet\routes\teams.py" />
-    <Content Include="omninet\Omninet Source Code\omninet\routes\users.py" />
-    <Content Include="omninet\Omninet Source Code\omninet\routes\__init__.py" />
-    <Content Include="omninet\Omninet Source Code\omninet\schemas\battle.py" />
-    <Content Include="omninet\Omninet Source Code\omninet\schemas\common.py" />
-    <Content Include="omninet\Omninet Source Code\omninet\schemas\module.py" />
-    <Content Include="omninet\Omninet Source Code\omninet\schemas\user.py" />
-    <Content Include="omninet\Omninet Source Code\omninet\schemas\__init__.py" />
-    <Content Include="omninet\Omninet Source Code\omninet\services\auth.py" />
-    <Content Include="omninet\Omninet Source Code\omninet\services\battle.py" />
-    <Content Include="omninet\Omninet Source Code\omninet\services\cache.py" />
-    <Content Include="omninet\Omninet Source Code\omninet\services\device.py" />
-    <Content Include="omninet\Omninet Source Code\omninet\services\email.py" />
-    <Content Include="omninet\Omninet Source Code\omninet\services\logging.py" />
-    <Content Include="omninet\Omninet Source Code\omninet\services\module.py" />
-    <Content Include="omninet\Omninet Source Code\omninet\services\season.py" />
-    <Content Include="omninet\Omninet Source Code\omninet\services\security.py" />
-    <Content Include="omninet\Omninet Source Code\omninet\services\team.py" />
-    <Content Include="omninet\Omninet Source Code\omninet\services\user.py" />
-    <Content Include="omninet\Omninet Source Code\omninet\services\__init__.py" />
-    <Content Include="omninet\Omninet Source Code\omninet\__init__.py" />
-    <Content Include="omninet\Omninet Source Code\requirements.txt" />
-    <Content Include="omninet\Omninet Source Code\test_api.py" />
     <Content Include="template\backgrounds.html">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
