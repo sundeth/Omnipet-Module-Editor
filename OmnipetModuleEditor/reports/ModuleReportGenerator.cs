@@ -24,6 +24,7 @@ namespace OmnipetModuleEditor.Reports
         private List<Item> items;
         private List<Quest> quests;
         private List<Event> events;
+        private CollectionFile cardCollection;
 
         // Lookup sets built once
         private HashSet<string> unlockNames;
@@ -55,6 +56,7 @@ namespace OmnipetModuleEditor.Reports
                 ("Pets", CheckPets()),
                 ("Battle", CheckBattle()),
                 ("Items", CheckItems()),
+                ("Collection", CheckCollection()),
                 ("Quests/Events", CheckQuestsEvents())
             };
 
@@ -83,6 +85,7 @@ namespace OmnipetModuleEditor.Reports
             items = LoadJson<Item>("item.json", "item");
             quests = LoadJson<Quest>("quests.json", "quests");
             events = LoadJson<Event>("events.json", "events");
+            cardCollection = CollectionFile.Load(modulePath);
         }
 
         private List<T> LoadJson<T>(string fileName, string rootProperty)
@@ -1280,6 +1283,149 @@ namespace OmnipetModuleEditor.Reports
         private bool HasRange(int[] range)
         {
             return range != null && range.Length >= 2 && (range[0] != 0 || range[1] != 0);
+        }
+
+        #endregion
+
+        #region Collection Checks
+
+        private static bool IsBinaryValue(string v)
+        {
+            if (string.IsNullOrEmpty(v) || v.Length > 10) return false;
+            foreach (char c in v) if (c != '0' && c != '1') return false;
+            return true;
+        }
+
+        private List<ReportEntry> CheckCollection()
+        {
+            var entries = new List<ReportEntry>();
+            if (cardCollection == null || cardCollection.IsEmpty)
+                return entries;
+
+            var cards = cardCollection.Cards;
+            var itemNames = new HashSet<string>(
+                (items ?? new List<Item>()).Where(i => !string.IsNullOrWhiteSpace(i.Name)).Select(i => i.Name),
+                StringComparer.OrdinalIgnoreCase);
+
+            // duplicate uuids (errors — identity must be unique)
+            var dupIds = cards.Where(c => !string.IsNullOrEmpty(c.Id))
+                .GroupBy(c => c.Id).Where(g => g.Count() > 1)
+                .Select(g => $"{g.Key} ({g.Count()} cards)").ToList();
+            if (dupIds.Count > 0)
+                entries.Add(ReportEntry.Error("Duplicate card ids", dupIds));
+
+            // duplicate type+number (warning; Soul Plates all share number 0)
+            var dupNumbers = cards.Where(c => c.Type != CollectionCard.TypeSoulPlate)
+                .GroupBy(c => $"{c.Type} #{c.Number}").Where(g => g.Count() > 1)
+                .Select(g => g.Key).ToList();
+            if (dupNumbers.Count > 0)
+                entries.Add(ReportEntry.Warning("Duplicate card numbers", dupNumbers));
+
+            // invalid binary values / lr on non-5-bit
+            var badValues = cards.Where(c => !IsBinaryValue(c.Value))
+                .Select(c => c.DisplayLabel).ToList();
+            if (badValues.Count > 0)
+                entries.Add(ReportEntry.Error("Cards with an invalid binary value (must be 1-10 digits of 0/1)", badValues));
+
+            // missing sprites
+            var noFront = cards.Where(c => string.IsNullOrEmpty(c.Sprites?.Front)
+                    || !File.Exists(Path.Combine(modulePath, c.Sprites.Front.Replace('/', Path.DirectorySeparatorChar))))
+                .Select(c => c.DisplayLabel).ToList();
+            if (noFront.Count > 0)
+                entries.Add(ReportEntry.Warning("Cards without a front sprite", noFront));
+
+            // effects ↔ cards cross-coverage (informational by design: foreign
+            // cards may trigger effects, and cards may exist purely as art)
+            bool EffectMatchesCard(CardEffectGroup g, CollectionCard c)
+            {
+                if (g.Value != c.Value) return false;
+                string glr = string.IsNullOrEmpty(g.Lr) ? "Any" : g.Lr;
+                if (glr == "Any") return true;
+                string clr = string.IsNullOrEmpty(c.Lr) ? "L/R" : c.Lr;
+                return clr == "L/R" || clr == glr;
+            }
+            var cardsNoEffect = cards
+                .Where(c => IsBinaryValue(c.Value) && !cardCollection.Effects.Any(g => EffectMatchesCard(g, c)))
+                .Select(c => $"{c.DisplayLabel} [{c.RfidValue}]").ToList();
+            if (cardsNoEffect.Count > 0)
+                entries.Add(ReportEntry.Info("Cards with no matching effect", cardsNoEffect));
+
+            var effectsNoCard = cardCollection.Effects
+                .Where(g => !cards.Any(c => EffectMatchesCard(g, c)))
+                .Select(g => g.DisplayLabel).ToList();
+            if (effectsNoCard.Count > 0)
+                entries.Add(ReportEntry.Info("Effects with no matching card in this module", effectsNoCard));
+
+            // effect groups: invalid binaries + per-effect reference checks
+            var badGroupValues = cardCollection.Effects.Where(g => !IsBinaryValue(g.Value))
+                .Select(g => g.DisplayLabel ?? "(empty)").ToList();
+            if (badGroupValues.Count > 0)
+                entries.Add(ReportEntry.Error("Effect entries with an invalid binary value", badGroupValues));
+
+            var badItems = new List<string>();
+            var badUnlocks = new List<string>();
+            var badAreas = new List<string>();
+            var badAmounts = new List<string>();
+            var badVersions = new List<string>();
+            foreach (var g in cardCollection.Effects)
+            {
+                foreach (var fx in g.Effects ?? new List<CardEffect>())
+                {
+                    string where = $"{g.DisplayLabel}: {fx.DisplayLabel}";
+                    switch (fx.Type)
+                    {
+                        case "Item":
+                            if (string.IsNullOrWhiteSpace(fx.Item) || !itemNames.Contains(fx.Item))
+                                badItems.Add(where);
+                            if ((fx.Amount ?? 0) <= 0) badAmounts.Add(where);
+                            break;
+                        case "DNA":
+                            if ((fx.Amount ?? 0) <= 0) badAmounts.Add(where);
+                            break;
+                        case "Encounter":
+                            if ((fx.Area ?? 0) <= 0 || (fx.Round ?? 0) <= 0) badAmounts.Add(where);
+                            else if (battleAreas.Count > 0 && !battleAreas.Contains(fx.Area.Value))
+                                badAreas.Add(where);
+                            break;
+                        case "Unlock":
+                            if (string.IsNullOrWhiteSpace(fx.Unlock) || !unlockNames.Contains(fx.Unlock))
+                                badUnlocks.Add(where);
+                            break;
+                    }
+                    if (fx.Version != -1 && petVersions.Count > 0 && !petVersions.Contains(fx.Version))
+                        badVersions.Add(where);
+                }
+            }
+            if (badItems.Count > 0)
+                entries.Add(ReportEntry.Error("Card effects referencing unknown items", badItems));
+            if (badUnlocks.Count > 0)
+                entries.Add(ReportEntry.Error("Card effects referencing unknown unlocks", badUnlocks));
+            if (badAreas.Count > 0)
+                entries.Add(ReportEntry.Warning("Card effects referencing areas with no enemies", badAreas));
+            if (badAmounts.Count > 0)
+                entries.Add(ReportEntry.Error("Card effects with amounts/areas/rounds that must be > 0", badAmounts));
+            if (badVersions.Count > 0)
+                entries.Add(ReportEntry.Warning("Card effects targeting versions with no pets", badVersions));
+
+            // packs
+            var cardIds = new HashSet<string>(cards.Where(c => c.Id != null).Select(c => c.Id));
+            var packMissing = new List<string>();
+            var packEmpty = new List<string>();
+            foreach (var pack in cardCollection.Packs)
+            {
+                if (pack.Cards == null || pack.Cards.Count == 0)
+                    packEmpty.Add(pack.Name ?? "(unnamed)");
+                else
+                    foreach (var entry in pack.Cards)
+                        if (!cardIds.Contains(entry.Id))
+                            packMissing.Add($"{pack.Name}: entry references a missing card");
+            }
+            if (packMissing.Count > 0)
+                entries.Add(ReportEntry.Error("Card packs referencing missing cards", packMissing));
+            if (packEmpty.Count > 0)
+                entries.Add(ReportEntry.Warning("Card packs with no cards", packEmpty));
+
+            return entries;
         }
 
         #endregion

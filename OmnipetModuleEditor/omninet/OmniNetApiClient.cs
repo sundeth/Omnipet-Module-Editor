@@ -291,6 +291,11 @@ namespace OmnipetModuleEditor.OmniNet
                         fileContent.Headers.ContentType = MediaTypeHeaderValue.Parse("application/zip");
                         content.Add(fileContent, "file", Path.GetFileName(modulePath) + ".zip");
 
+                        // Integrity check: send a SHA-256 of the exact bytes we
+                        // upload so the server can reject a corrupted transfer
+                        // before it ever gets published to players.
+                        content.Add(new StringContent(ComputeSha256(fileBytes)), "sha256");
+
                         // Add authentication header
                         _httpClient.DefaultRequestHeaders.TryAddWithoutValidation("X-Device-Key", secretKey);
 
@@ -329,6 +334,21 @@ namespace OmnipetModuleEditor.OmniNet
                     Success = false,
                     ErrorMessage = ex.Message
                 };
+            }
+        }
+
+        /// <summary>
+        /// Compute the lowercase hex SHA-256 of the given bytes.
+        /// </summary>
+        private static string ComputeSha256(byte[] data)
+        {
+            using (var sha = System.Security.Cryptography.SHA256.Create())
+            {
+                var hash = sha.ComputeHash(data);
+                var sb = new StringBuilder(hash.Length * 2);
+                foreach (var b in hash)
+                    sb.Append(b.ToString("x2"));
+                return sb.ToString();
             }
         }
 

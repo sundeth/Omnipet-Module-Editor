@@ -47,6 +47,18 @@ A comprehensive module editor for the Omnipet virtual pet platform, allowing cre
 - **Item Boost Limits**: Configure max HP, Attack, and Power boosts from items
 - **G-Cell System**: Optional G-Cell currency system with configurable rewards
 
+### Collection System
+- **Cards**: Manage collectable cards (Soul Plate, DDP Chip, iD Plate, Custom) —
+  import card-maker ZIPs from the Digimon Database, upload custom sprites,
+  edit fields, export RFID payloads, and jump back to the online card maker
+  via *Edit Art*. Stored in `cards.json` + `cards/` sprites (template-native sizes)
+- **Effects**: Map binary values (1–10 bits, with L/R scope for 5-bit values)
+  to Item / DNA / Encounter / Unlock effects, per pet version
+- **Card Packs**: Define shop packs with per-card odds (rarity-weighted bulk
+  add) and a holographic "shine" chance
+- **Tools ▸ Import Collection from Module**: share collections across modules
+  (cards keyed by uuid)
+
 ### Unlocks & Backgrounds
 - **Unlock System**: Multiple unlock types (egg, adventure, evolution, digidex, battle, group, PVP, versus)
 - **Group Unlocks**: Combine multiple unlock requirements

@@ -29,6 +29,7 @@ namespace OmnipetModuleEditor.controls
                 ChartGenerator.GenerateChartsPage(docPath, pets, module, modulePath);
                 EnemyGenerator.GenerateEnemiesPage(docPath, enemies, module, modulePath);
                 ItemGenerator.GenerateItemsPage(docPath, items);
+                CollectionGenerator.GenerateCollectionPage(docPath, modulePath);
                 UnlockGenerator.GenerateUnlocksPage(docPath, module);
                 BackgroundGenerator.GenerateBackgroundsPage(docPath, module); // Add this line
                 QuestEventGenerator.GenerateQuestEventPage(docPath, modulePath); // Add this line

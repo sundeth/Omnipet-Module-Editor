@@ -1,4 +1,5 @@
 ﻿using OmnipetModuleEditor.controls;
+using OmnipetModuleEditor.DigimonSync;
 using OmnipetModuleEditor.OmniNet;
 using OmnipetModuleEditor.Reports;
 using OmnipetModuleEditor.Tabs;
@@ -22,6 +23,11 @@ namespace OmnipetModuleEditor
         private string currentPath;
         private Models.Module currentModule;
         private Form selectorForm;
+
+        // Tab references, kept so menu items can trigger tab-specific actions.
+        private PetTab petControl;
+        private BattleTab battleTabControl;
+        private CollectionTab collectionTabControl;
 
         /// <summary>
         /// Initializes the module editor form.
@@ -50,11 +56,9 @@ namespace OmnipetModuleEditor
             this.FormClosed += ModuleEditorForm_FormClosed;
 
             AddTabs();
-            
-            // Auto-login check (this will update publish button internally)
+
+            // Validate any saved Omninet session in the background.
             TryAutoLogin();
-            
-            // NOTE: UpdatePublishButton() is now called by TryAutoLogin(), no need to call twice
         }
 
         // =========================
@@ -68,6 +72,29 @@ namespace OmnipetModuleEditor
         {
             if (selectorForm != null)
                 selectorForm.Show();
+        }
+
+        /// <summary>
+        /// Routes Ctrl+C / Ctrl+V to the active tab's list/grid so the selected
+        /// entry can be duplicated. Text-entry controls keep their normal copy
+        /// and paste behaviour (guarded by <see cref="ClipboardListUtils.IsTextEntryFocused"/>).
+        /// </summary>
+        protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+        {
+            bool isCopy = keyData == (Keys.Control | Keys.C);
+            bool isPaste = keyData == (Keys.Control | Keys.V);
+            if ((isCopy || isPaste) && !ClipboardListUtils.IsTextEntryFocused())
+            {
+                var page = tabControlMain.SelectedTab;
+                if (page != null && page.Controls.Count > 0
+                    && page.Controls[0] is IListClipboardTarget target)
+                {
+                    if (isCopy) target.CopySelection();
+                    else target.PasteClipboard();
+                    return true;
+                }
+            }
+            return base.ProcessCmdKey(ref msg, keyData);
         }
 
         // =========================
@@ -156,11 +183,11 @@ namespace OmnipetModuleEditor
             moduleTab.Controls.Add(moduleTabControl);
             tabControlMain.TabPages.Add(moduleTab);
 
-            var petControl = new PetTab();
+            petControl = new PetTab();
             petControl.Dock = DockStyle.Fill;
             petControl.SetModule(currentPath, currentModule);
 
-            var battleTabControl = new BattleTab();
+            battleTabControl = new BattleTab();
             battleTabControl.Dock = DockStyle.Fill;
             battleTabControl.SetModule(currentPath, currentModule);
 
@@ -190,6 +217,14 @@ namespace OmnipetModuleEditor
             itemTab.Controls.Add(itemControl);
             tabControlMain.TabPages.Add(itemTab);
 
+            collectionTabControl = new CollectionTab();
+            collectionTabControl.Dock = DockStyle.Fill;
+            collectionTabControl.SetModule(currentPath, currentModule);
+
+            var collectionTab = new TabPage("Collection");
+            collectionTab.Controls.Add(collectionTabControl);
+            tabControlMain.TabPages.Add(collectionTab);
+
             var questEventControl = new QuestEventTab();
             questEventControl.Dock = DockStyle.Fill;
             questEventControl.SetModule(currentPath, currentModule);
@@ -197,6 +232,13 @@ namespace OmnipetModuleEditor
             var questEventTab = new TabPage("Quests/Events");
             questEventTab.Controls.Add(questEventControl);
             tabControlMain.TabPages.Add(questEventTab);
+        }
+
+        /// <summary>Tools ▸ Import Collection from Module — merges another
+        /// module's cards/effects/packs into this one (matched by uuid).</summary>
+        private void importCollection_Click(object sender, EventArgs e)
+        {
+            collectionTabControl?.ImportFromModuleFlow();
         }
 
         private void buttonGenerateDoc_Click(object sender, EventArgs e)
@@ -488,173 +530,199 @@ namespace OmnipetModuleEditor
                 System.Diagnostics.Debug.WriteLine($"[ModuleEditorForm] Auto-login exception: {ex.Message}");
                 // Unknown error - preserve session unless it's clearly an auth issue
             }
-
-            UpdatePublishButton();
         }
 
         /// <summary>
-        /// Updates the publish button text based on module status.
-        /// </summary>
-        private async void UpdatePublishButton()
-        {
-            var config = OmniNetConfig.Instance;
-            
-            if (!config.IsLoggedIn)
-            {
-                buttonPublish.Text = "Publish";
-                buttonPublish.Enabled = true;
-                return;
-            }
-
-            try
-            {
-                using (var client = new OmniNetApiClient())
-                {
-                    var response = await client.GetModuleStatusAsync(currentModule?.Name ?? "", config.SecretKey);
-                    
-                    if (response.Success && response.Data.success)
-                    {
-                        switch (response.Data.status)
-                        {
-                            case "published":
-                                buttonPublish.Text = "Unpublish";
-                                break;
-                            case "unpublished":
-                            case "not_found":
-                            default:
-                                buttonPublish.Text = "Publish";
-                                break;
-                        }
-                    }
-                    else
-                    {
-                        System.Diagnostics.Debug.WriteLine($"[ModuleEditorForm] GetModuleStatus failed: {response.ErrorMessage}");
-                        buttonPublish.Text = "Publish";
-                    }
-                }
-            }
-            catch (System.Net.Http.HttpRequestException ex)
-            {
-                // Network errors - likely OmniNet is offline
-                System.Diagnostics.Debug.WriteLine($"[ModuleEditorForm] Network error checking module status: {ex.Message}");
-                buttonPublish.Text = "Publish";
-            }
-            catch (Exception ex)
-            {
-                // Log unexpected errors but don't crash the UI
-                System.Diagnostics.Debug.WriteLine($"[ModuleEditorForm] Unexpected error in UpdatePublishButton: {ex.Message}");
-                System.Diagnostics.Debug.WriteLine($"[ModuleEditorForm] Stack trace: {ex.StackTrace}");
-                buttonPublish.Text = "Publish";
-            }
-        }
-
-        /// <summary>
-        /// Opens the account management dialog.
+        /// Opens the account management dialog (Omninet ▸ Account).
         /// </summary>
         private void buttonAccount_Click(object sender, EventArgs e)
         {
-            var config = OmniNetConfig.Instance;
-            var wasLoggedInBefore = config.IsLoggedIn;
-            
-            System.Diagnostics.Debug.WriteLine($"[ModuleEditorForm] Opening AccountForm - Currently logged in: {wasLoggedInBefore}");
-            
             using (var form = new AccountForm())
             {
-                var result = form.ShowDialog(this);
-                
-                // Check current state after dialog closes
-                var isLoggedInAfter = config.IsLoggedIn;
-                System.Diagnostics.Debug.WriteLine($"[ModuleEditorForm] AccountForm closed with result: {result}");
-                System.Diagnostics.Debug.WriteLine($"[ModuleEditorForm] Currently logged in: {isLoggedInAfter}");
-                System.Diagnostics.Debug.WriteLine($"[ModuleEditorForm] SecretKey exists: {!string.IsNullOrEmpty(config.SecretKey)}");
-                System.Diagnostics.Debug.WriteLine($"[ModuleEditorForm] Nickname: {config.Nickname}");
-                
-                // Only update if login state changed to avoid unnecessary network calls
-                if (wasLoggedInBefore != isLoggedInAfter)
-                {
-                    System.Diagnostics.Debug.WriteLine($"[ModuleEditorForm] Login state changed, updating publish button");
-                    UpdatePublishButton();
-                }
-                else if (isLoggedInAfter)
-                {
-                    // Still logged in, but might need to refresh button state
-                    // (e.g., if user toggled between published/unpublished in another session)
-                    System.Diagnostics.Debug.WriteLine($"[ModuleEditorForm] Still logged in, refreshing publish button state");
-                    UpdatePublishButton();
-                }
+                form.ShowDialog(this);
             }
         }
 
         /// <summary>
-        /// Handles publish/unpublish button click.
+        /// Opens the module management dialog (Omninet ▸ Manage Module).
+        /// The dialog handles publishing, updating, unpublishing and
+        /// contributor management based on the module's current status.
         /// </summary>
-        private async void buttonPublish_Click(object sender, EventArgs e)
+        private void manageModule_Click(object sender, EventArgs e)
         {
             var config = OmniNetConfig.Instance;
-            
+
             if (!config.IsLoggedIn)
             {
-                MessageBox.Show("You must be logged in to publish modules.\n\nClick the Account button to login or create an account.",
+                MessageBox.Show(
+                    "You must be logged in to manage modules.\n\nOpen Omninet ▸ Account to login or create an account.",
                     "Login Required", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
 
-            // First, save the module
-            buttonSave_Click(sender, e);
-            
-            // Reload module data
+            // Persist the latest edits and reload so the dialog sees current data.
+            SaveAll();
             LoadOrCreateModule();
 
             if (string.IsNullOrWhiteSpace(currentModule?.Name))
             {
-                MessageBox.Show("The module must have a name before publishing.", "Invalid Module", 
+                MessageBox.Show("The module must have a name before publishing.", "Invalid Module",
                     MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
 
-            if (buttonPublish.Text == "Unpublish")
+            using (var form = new PublishModuleForm(currentPath, currentModule.Name, currentModule.Version))
             {
-                var confirmResult = MessageBox.Show(
-                    "Are you sure you want to unpublish this module?\n\nIt will no longer be available for download.",
-                    "Confirm Unpublish",
-                    MessageBoxButtons.YesNo,
-                    MessageBoxIcon.Warning);
+                form.ShowDialog(this);
+            }
+        }
 
-                if (confirmResult != DialogResult.Yes)
-                    return;
+        // =========================
+        // Edit / Tools menu actions
+        // =========================
 
-                try
+        /// <summary>Edit ▸ Edit Evolutions — same as the Pet tab button.</summary>
+        private void editEvolutions_Click(object sender, EventArgs e) => petControl?.OpenEvolutionsEditor();
+
+        /// <summary>Edit ▸ Enemy Editor — same as the Battle tab "Fast Editor" button.</summary>
+        private void enemyEditor_Click(object sender, EventArgs e) => battleTabControl?.OpenEnemyEditor();
+
+        /// <summary>Edit ▸ Special Encounters — same as the Battle tab button.</summary>
+        private void specialEncounters_Click(object sender, EventArgs e) => battleTabControl?.OpenSpecialEncounters();
+
+        /// <summary>Tools ▸ Update ATK Sprites — moved here from the Battle tab.</summary>
+        private void updateAtkSprites_Click(object sender, EventArgs e) => battleTabControl?.UpdateAtkSprites();
+
+        /// <summary>
+        /// Tools ▸ Generate Pet Index — assigns the Index field for all pets in the
+        /// module based on the current pet-list ordering (eggs = -1, otherwise 0-based
+        /// per version).
+        /// </summary>
+        private void generatePetIndex_Click(object sender, EventArgs e)
+        {
+            if (petControl == null)
+                return;
+
+            petControl.GenerateIndexes();
+            MessageBox.Show("Pet indexes were generated.", "Generate Pet Index",
+                MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+
+        // =========================
+        // Digimon Database menu
+        // =========================
+
+        private async void digimonRecordMatch_Click(object sender, EventArgs e)
+            => await RunDigimonOperation("Record Match",
+                svc => (svc.BuildRecordMatchReport(), null, (Func<string>)null));
+
+        private async void digimonValidateNames_Click(object sender, EventArgs e)
+            => await RunDigimonOperation("Validate Digimon Names",
+                svc => (svc.BuildValidateReport(), null, (Func<string>)null));
+
+        private async void digimonNormalizeNames_Click(object sender, EventArgs e)
+            => await RunDigimonOperation("Normalize Digimon Names",
+                svc => { var r = svc.BuildNormalize(); return (r.Report, "Apply", r.Apply); });
+
+        private async void digimonImportMinWeight_Click(object sender, EventArgs e)
+            => await RunDigimonOperation("Import Min Weight",
+                svc => { var r = svc.BuildImportMinWeight(); return (r.Report, "Apply", r.Apply); });
+
+        /// <summary>
+        /// Digimon Database ▸ Update Local Sprite Database. Refreshes the global
+        /// assets sprite library against the database for this module's names.
+        /// </summary>
+        private async void digimonUpdateSprites_Click(object sender, EventArgs e)
+        {
+            if (string.IsNullOrEmpty(currentPath)
+                || !File.Exists(Path.Combine(currentPath, "monster.json")))
+            {
+                MessageBox.Show("This module has no monster.json to work with.",
+                    "Update Local Sprite Database", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            SaveAll();
+
+            System.Collections.Generic.List<DigimonRecord> records;
+            this.UseWaitCursor = true;
+            try
+            {
+                records = await DigimonDbClient.GetAllAsync();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Could not reach the Digimon Database:\n" + ex.Message,
+                    "Update Local Sprite Database", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+            finally
+            {
+                this.UseWaitCursor = false;
+            }
+
+            string customPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory,
+                "digimondb", "custom_matches.json");
+            var db = new DigimonDb(records, customPath);
+            var updater = new LocalSpriteUpdater(currentPath, currentModule?.NameFormat,
+                currentModule?.PrimarySpriteFormat, currentModule?.SecondarySpriteFormat, db);
+
+            using (var form = new SpriteUpdateForm(p => updater.RunAsync(p)))
+                form.ShowDialog(this);
+        }
+
+        /// <summary>
+        /// Shared driver for the Digimon Database menu actions: flush edits,
+        /// fetch the catalogue from the live API (cached), run the requested
+        /// operation, show its report, and reload tabs for apply operations.
+        /// </summary>
+        private async Task RunDigimonOperation(string title,
+            Func<ModuleSyncService, (string Report, string ApplyText, Func<string> Apply)> op)
+        {
+            if (string.IsNullOrEmpty(currentPath)
+                || !File.Exists(Path.Combine(currentPath, "monster.json")))
+            {
+                MessageBox.Show("This module has no monster.json to work with.", title,
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            // Flush any unsaved editor changes so the sync sees current data.
+            SaveAll();
+
+            System.Collections.Generic.List<DigimonRecord> records;
+            this.UseWaitCursor = true;
+            try
+            {
+                records = await DigimonDbClient.GetAllAsync();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Could not reach the Digimon Database:\n" + ex.Message,
+                    title, MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+            finally
+            {
+                this.UseWaitCursor = false;
+            }
+
+            string customPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory,
+                "digimondb", "custom_matches.json");
+            var db = new DigimonDb(records, customPath);
+            var svc = new ModuleSyncService(currentPath, currentModule?.NameFormat, db);
+
+            var result = op(svc);
+            using (var form = new DigimonReportForm(title, result.Report, result.ApplyText, result.Apply))
+            {
+                var dr = form.ShowDialog(this);
+                if (result.Apply != null && dr == DialogResult.OK)
                 {
-                    using (var client = new OmniNetApiClient())
-                    {
-                        var response = await client.UnpublishModuleAsync(currentModule.Name, config.SecretKey);
-                        
-                        if (response.Success && response.Data.success)
-                        {
-                            MessageBox.Show("Module unpublished successfully.", "Success",
-                                MessageBoxButtons.OK, MessageBoxIcon.Information);
-                        }
-                        else
-                        {
-                            MessageBox.Show(response.ErrorMessage ?? response.Data?.message ?? "Failed to unpublish module.",
-                                "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    MessageBox.Show($"Error: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    // Reload the module + tabs so the editor reflects the writes.
+                    LoadOrCreateModule();
+                    AddTabs();
                 }
             }
-            else
-            {
-                using (var form = new PublishModuleForm(currentPath, currentModule.Name, currentModule.Version))
-                {
-                    form.ShowDialog(this);
-                }
-            }
-
-            UpdatePublishButton();
         }
     }
 }

@@ -1,4 +1,5 @@
 using OmnipetModuleEditor.Controls;
+using OmnipetModuleEditor.DigimonSync;
 using OmnipetModuleEditor.Models;
 using OmnipetModuleEditor.Utils;
 using System;
@@ -9,6 +10,7 @@ using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Text.Json;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 
 namespace OmnipetModuleEditor.Tabs
@@ -16,7 +18,7 @@ namespace OmnipetModuleEditor.Tabs
     /// <summary>
     /// Tab for managing and editing pets in the module.
     /// </summary>
-    public partial class PetTab : UserControl
+    public partial class PetTab : UserControl, IListClipboardTarget
     {
         // Fields - Changed to internal so PetEditPanel can access them
         internal List<Pet> pets;
@@ -417,7 +419,6 @@ namespace OmnipetModuleEditor.Tabs
         {
             if (copiedPet == null) return;
             var newPet = PetUtils.ClonePet(copiedPet);
-            newPet.Name += Properties.Resources.PetTab_CopySuffix ?? " Copy";
             pets.Add(newPet);
             SortPets();
             var panel = PopulatePetPanelAndReturnPanel(newPet);
@@ -426,23 +427,149 @@ namespace OmnipetModuleEditor.Tabs
             Save();
         }
 
-        private void BtnAdd_Click(object sender, EventArgs e)
+        /// <summary>Ctrl+C — copy the selected pet into the paste buffer.</summary>
+        public void CopySelection() => BtnCopy_Click(this, EventArgs.Empty);
+
+        /// <summary>Ctrl+V — paste a duplicate of the copied pet.</summary>
+        public void PasteClipboard() => BtnPaste_Click(this, EventArgs.Empty);
+
+        /// <summary>Edit menu: open the evolutions editor for this module's pets.</summary>
+        public void OpenEvolutionsEditor()
         {
-            using (var dlg = new StageSelectForm())
+            var dlg = new EvolutionsEditorForm(pets, modulePath, module);
+            dlg.ShowDialog(this);
+        }
+
+        /// <summary>
+        /// Tools menu: assign the Index field to every pet following the order they
+        /// currently appear in the pet list. Stage 0 (egg) pets are always index -1;
+        /// for all other pets the index restarts at 0 for each version and increments
+        /// in list order (version 1 → 0,1,2,…, then version 2 → 0,1,2,…).
+        /// </summary>
+        public void GenerateIndexes()
+        {
+            if (pets == null || pets.Count == 0)
+                return;
+
+            // Use the same ordering shown in the pet list panel.
+            var ordered = GetSortedPets();
+            var perVersionCounter = new Dictionary<int, int>();
+
+            foreach (var pet in ordered)
             {
-                if (dlg.ShowDialog(this) == DialogResult.OK && dlg.SelectedStage >= 0 && dlg.SelectedStage <= 8)
+                if (pet.Stage == 0)
                 {
-                    var template = OmnipetModuleEditor.Models.PetTemplates.ByStage[dlg.SelectedStage];
-                    var newPet = PetUtils.ClonePet(template);
-                    newPet.Name = Properties.Resources.PetTab_NewPetName ?? "New Pet";
-                    newPet.Stage = dlg.SelectedStage;
-                    pets.Add(newPet);
-                    SortPets();
-                    var panel = PopulatePetPanelAndReturnPanel(newPet);
-                    if (panel != null)
-                        SelectPetPanel(panel);
-                    Save();
+                    pet.Index = -1;
+                    continue;
                 }
+
+                int next = perVersionCounter.TryGetValue(pet.Version, out int c) ? c : 0;
+                pet.Index = next;
+                perVersionCounter[pet.Version] = next + 1;
+            }
+
+            SortPets();
+            PopulatePetPanel();
+            Save();
+        }
+
+        private async void BtnAdd_Click(object sender, EventArgs e)
+        {
+            // Try to load the Digimon catalogue so the Add dialog can offer
+            // database-driven options; fall back to Custom-only when offline.
+            List<DigimonRecord> records = null;
+            Dictionary<string, int> levelMap = null;
+            this.Cursor = Cursors.WaitCursor;
+            try
+            {
+                records = await DigimonDbClient.GetAllAsync();
+                levelMap = await DigimonDbClient.GetLevelNameToIdAsync();
+            }
+            catch
+            {
+                records = null;
+                levelMap = null;
+            }
+            finally
+            {
+                this.Cursor = Cursors.Default;
+            }
+
+            using (var dlg = new AddPetForm(0, records, levelMap))
+            {
+                if (dlg.ShowDialog(this) != DialogResult.OK
+                    || dlg.SelectedStage < 0 || dlg.SelectedStage > 8)
+                    return;
+
+                int stage = dlg.SelectedStage;
+                var template = OmnipetModuleEditor.Models.PetTemplates.ByStage[stage];
+                var newPet = PetUtils.ClonePet(template);
+                newPet.Stage = stage;
+
+                var digimon = dlg.SelectedDigimon;
+                if (digimon == null)
+                {
+                    // "Custom" — keep the original blank-template behaviour.
+                    newPet.Name = Properties.Resources.PetTab_NewPetName ?? "New Pet";
+                }
+                else
+                {
+                    newPet.Name = digimon.NameEnglish
+                                  ?? (Properties.Resources.PetTab_NewPetName ?? "New Pet");
+                    if (digimon.MinWeight.HasValue)
+                        newPet.MinWeight = digimon.MinWeight.Value;
+                    newPet.Attribute = DigimonPetFactory.MapAttributeCode(digimon.Attributes);
+
+                    if (dlg.SelectedModule != null && digimon.ExtraData != null
+                        && digimon.ExtraData.TryGetValue(dlg.SelectedModule, out var extra))
+                    {
+                        // Import all of the module's extra-data into the pet,
+                        // then pull that module's custom sprite sheets in.
+                        newPet = DigimonPetFactory.WithExtraData(newPet, extra);
+                        await ImportModuleSpritesAsync(digimon.Id, dlg.SelectedModule, newPet.Name);
+                    }
+                }
+
+                pets.Add(newPet);
+                SortPets();
+                var panel = PopulatePetPanelAndReturnPanel(newPet);
+                if (panel != null)
+                    SelectPetPanel(panel);
+                Save();
+            }
+        }
+
+        /// <summary>
+        /// Download the source module's custom sprite sheets for a Digimon and
+        /// write them into this module's sprite folders under the pet's name.
+        /// Best-effort: formats with no custom sheet are simply skipped.
+        /// </summary>
+        private async Task ImportModuleSpritesAsync(string digimonId, string sourceModule, string petName)
+        {
+            var formats = new[]
+            {
+                ("color", "monsters"),
+                ("dot", "monsters_dot"),
+                ("hd", "monsters_hidef"),
+            };
+            string spriteName = SpriteUtils.GetSpriteName(petName, module?.NameFormat);
+            this.Cursor = Cursors.WaitCursor;
+            try
+            {
+                foreach (var fmt in formats)
+                {
+                    var bytes = await DigimonDbClient.DownloadModuleSheetAsync(digimonId, fmt.Item1, sourceModule);
+                    if (bytes == null || bytes.Length == 0)
+                        continue;
+                    var dir = Path.Combine(modulePath, fmt.Item2);
+                    Directory.CreateDirectory(dir);
+                    File.WriteAllBytes(Path.Combine(dir, spriteName + ".zip"), bytes);
+                }
+            }
+            catch { /* sprite import is best-effort */ }
+            finally
+            {
+                this.Cursor = Cursors.Default;
             }
         }
 

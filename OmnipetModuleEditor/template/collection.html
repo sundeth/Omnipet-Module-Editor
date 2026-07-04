@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Collection</title>
+    <link rel="stylesheet" href="module.css">
+    <style>
+        .card-gallery { display: flex; flex-wrap: wrap; gap: 14px; margin: 10px 0 30px 0; }
+        .collection-card {
+            width: 150px; border: 1px solid #d8dbe2; border-radius: 8px;
+            padding: 8px; text-align: center; background: #fff;
+        }
+        .collection-card img { max-width: 125px; max-height: 175px; image-rendering: pixelated; }
+        .collection-card .card-title { font-weight: bold; margin-top: 6px; font-size: 0.9em; }
+        .collection-card .card-sub { color: #777; font-size: 0.78em; }
+        .collection-card .card-value { font-family: monospace; font-size: 0.85em; margin-top: 2px; }
+        .rarity-Common { color: #4a5568; }
+        .rarity-Rare { color: #2b6cb0; font-weight: bold; }
+        .rarity-Legendary { color: #b7791f; font-weight: bold; }
+        .pack-sprite { max-width: 64px; max-height: 64px; image-rendering: pixelated; }
+        h2 { margin-top: 34px; }
+        td.mono { font-family: monospace; }
+    </style>
+</head>
+<body>
+    <div class="page-content">
+        <h1>Module Collection</h1>
+
+        <h2>Cards</h2>
+        <div class="card-gallery">
+            #CARDSDATA
+        </div>
+
+        <h2>Effects</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Binary</th>
+                    <th>L/R</th>
+                    <th>Effects</th>
+                </tr>
+            </thead>
+            <tbody>
+                #EFFECTSDATA
+            </tbody>
+        </table>
+
+        <h2>Card Packs</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Pack</th>
+                    <th>Cards per Pack</th>
+                    <th>Shine Chance</th>
+                    <th>Contents (odds)</th>
+                </tr>
+            </thead>
+            <tbody>
+                #PACKSDATA
+            </tbody>
+        </table>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            // hide empty sections
+            document.querySelectorAll('table tbody').forEach(function (tbody) {
+                if (tbody.children.length === 0) {
+                    var table = tbody.closest('table');
+                    var h2 = table.previousElementSibling;
+                    table.style.display = 'none';
+                    if (h2 && h2.tagName === 'H2') h2.insertAdjacentHTML('afterend', '<p><i>None.</i></p>');
+                }
+            });
+            var gallery = document.querySelector('.card-gallery');
+            if (gallery && gallery.children.length === 0)
+                gallery.insertAdjacentHTML('afterend', '<p><i>No cards in this collection.</i></p>');
+        });
+    </script>
+</body>
+</html>

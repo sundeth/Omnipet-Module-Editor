@@ -1,4 +1,5 @@
 using OmnipetModuleEditor.Models;
+using OmnipetModuleEditor.Utils;
 using System;
 using System.Collections.Generic;
 using System.Drawing;
@@ -12,7 +13,7 @@ namespace OmnipetModuleEditor.Tabs
     /// <summary>
     /// Editor tab for managing items in the module.
     /// </summary>
-    public partial class ItemTab : UserControl
+    public partial class ItemTab : UserControl, IListClipboardTarget
     {
         // Fields
         private ListBox lstItems;
@@ -37,6 +38,7 @@ namespace OmnipetModuleEditor.Tabs
         private string modulePath;
         private Module module;
         private Item selectedItem;
+        private Item copiedItem;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="ItemTab"/> class.
@@ -410,6 +412,23 @@ namespace OmnipetModuleEditor.Tabs
                 Id = ""
             };
             items.Add(newItem);
+            PopulateItemList();
+            lstItems.SelectedIndex = items.Count - 1;
+        }
+
+        /// <summary>Ctrl+C — copy the selected item into the paste buffer.</summary>
+        public void CopySelection()
+        {
+            if (lstItems.SelectedIndex < 0 || lstItems.SelectedIndex >= items.Count)
+                return;
+            copiedItem = ClipboardListUtils.DeepClone(items[lstItems.SelectedIndex]);
+        }
+
+        /// <summary>Ctrl+V — paste a duplicate of the copied item.</summary>
+        public void PasteClipboard()
+        {
+            if (copiedItem == null) return;
+            items.Add(ClipboardListUtils.DeepClone(copiedItem));
             PopulateItemList();
             lstItems.SelectedIndex = items.Count - 1;
         }

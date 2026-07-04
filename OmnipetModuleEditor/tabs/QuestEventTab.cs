@@ -1,4 +1,5 @@
 using OmnipetModuleEditor.Models;
+using OmnipetModuleEditor.Utils;
 using System;
 using System.Collections.Generic;
 using System.Drawing;
@@ -12,7 +13,7 @@ namespace OmnipetModuleEditor.Tabs
     /// <summary>
     /// Tab for managing and editing quests and events in the module.
     /// </summary>
-    public partial class QuestEventTab : UserControl
+    public partial class QuestEventTab : UserControl, IListClipboardTarget
     {
         private TabControl mainTabControl;
         private TabPage questTab;
@@ -21,6 +22,20 @@ namespace OmnipetModuleEditor.Tabs
         private EventPanel eventPanel;
         private string modulePath;
         private Module module;
+
+        /// <summary>Ctrl+C — copy the selected row of the active (Quests/Events) sub-tab.</summary>
+        public void CopySelection()
+        {
+            if (mainTabControl.SelectedTab == questTab) questPanel.CopySelection();
+            else if (mainTabControl.SelectedTab == eventTab) eventPanel.CopySelection();
+        }
+
+        /// <summary>Ctrl+V — paste a duplicate row into the active sub-tab.</summary>
+        public void PasteClipboard()
+        {
+            if (mainTabControl.SelectedTab == questTab) questPanel.PasteClipboard();
+            else if (mainTabControl.SelectedTab == eventTab) eventPanel.PasteClipboard();
+        }
 
         /// <summary>
         /// Initializes a new instance of the <see cref="QuestEventTab"/> class.
@@ -540,6 +555,28 @@ namespace OmnipetModuleEditor.Tabs
                     }
                 }
             }
+
+            private Quest copiedQuest;
+
+            public void CopySelection()
+            {
+                if (bindingSource.Current is Quest selected)
+                    copiedQuest = ClipboardListUtils.DeepClone(selected);
+            }
+
+            public void PasteClipboard()
+            {
+                if (copiedQuest == null) return;
+                var newQuest = ClipboardListUtils.DeepClone(copiedQuest);
+                newQuest.Id = Guid.NewGuid().ToString();
+                quests.Add(newQuest);
+                bindingSource.ResetBindings(false);
+                if (dgvQuests.Rows.Count > 0)
+                {
+                    try { dgvQuests.CurrentCell = dgvQuests.Rows[dgvQuests.Rows.Count - 1].Cells[0]; }
+                    catch { }
+                }
+            }
         }
 
         /// <summary>
@@ -869,6 +906,28 @@ namespace OmnipetModuleEditor.Tabs
                         events.Remove(selectedEvent);
                         bindingSource.ResetBindings(false);
                     }
+                }
+            }
+
+            private Event copiedEvent;
+
+            public void CopySelection()
+            {
+                if (bindingSource.Current is Event selected)
+                    copiedEvent = ClipboardListUtils.DeepClone(selected);
+            }
+
+            public void PasteClipboard()
+            {
+                if (copiedEvent == null) return;
+                var newEvent = ClipboardListUtils.DeepClone(copiedEvent);
+                newEvent.Id = Guid.NewGuid().ToString();
+                events.Add(newEvent);
+                bindingSource.ResetBindings(false);
+                if (dgvEvents.Rows.Count > 0)
+                {
+                    try { dgvEvents.CurrentCell = dgvEvents.Rows[dgvEvents.Rows.Count - 1].Cells[0]; }
+                    catch { }
                 }
             }
         }

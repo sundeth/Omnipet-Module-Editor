@@ -1,5 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.Drawing;
+using System.IO;
+using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
@@ -328,6 +331,19 @@ namespace OmnipetModuleEditor.OmniNet
 
         private async void BtnPublish_Click(object sender, EventArgs e)
         {
+            // Block publishing of incomplete modules before any upload happens.
+            var validationErrors = ValidateModuleForPublish();
+            if (validationErrors.Count > 0)
+            {
+                MessageBox.Show(
+                    "This module cannot be published until the following issues are resolved:\n\n• "
+                    + string.Join("\n• ", validationErrors),
+                    "Cannot Publish Module",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+                return;
+            }
+
             var confirmMessage = _action == "create_new"
                 ? "Are you sure you want to publish this new module to OmniNet?"
                 : "Are you sure you want to update this module on OmniNet?";
@@ -457,10 +473,125 @@ namespace OmnipetModuleEditor.OmniNet
             }
         }
 
+        /// <summary>
+        /// Validate that the module on disk meets the minimum requirements to
+        /// be published. Returns a list of human-readable problems (empty = OK).
+        ///
+        /// Rules:
+        ///   - logo.png and Flag.png must always exist.
+        ///   - Adventure-mode modules must also have BattleIcon.png (battle flag).
+        ///   - At least one pet (monster.json).
+        ///   - Adventure-mode modules need at least one battler that is not a
+        ///     special encounter (battle.json).
+        /// </summary>
+        private List<string> ValidateModuleForPublish()
+        {
+            var errors = new List<string>();
+
+            if (string.IsNullOrEmpty(_modulePath) || !Directory.Exists(_modulePath))
+            {
+                errors.Add("Module folder could not be found.");
+                return errors;
+            }
+
+            // Logo + flag are always required.
+            if (!File.Exists(Path.Combine(_modulePath, "logo.png")))
+                errors.Add("Missing logo sprite (logo.png).");
+            if (!File.Exists(Path.Combine(_modulePath, "Flag.png")))
+                errors.Add("Missing flag sprite (Flag.png).");
+
+            bool adventureMode = GetAdventureMode();
+
+            // The battle flag is only required when the module has adventure mode.
+            if (adventureMode && !File.Exists(Path.Combine(_modulePath, "BattleIcon.png")))
+                errors.Add("Adventure mode modules require a battle flag sprite (BattleIcon.png).");
+
+            // At least one pet.
+            if (CountPets() < 1)
+                errors.Add("Module must have at least one pet.");
+
+            // Adventure mode requires at least one non-special battler.
+            if (adventureMode && CountNonSpecialEnemies() < 1)
+                errors.Add("Adventure mode modules require at least one battler that is not a special encounter.");
+
+            return errors;
+        }
+
+        /// <summary>Reads the adventure_mode flag from module.json (false on any error).</summary>
+        private bool GetAdventureMode()
+        {
+            try
+            {
+                string moduleJsonPath = Path.Combine(_modulePath, "module.json");
+                if (!File.Exists(moduleJsonPath))
+                    return false;
+                using (var doc = JsonDocument.Parse(File.ReadAllText(moduleJsonPath)))
+                {
+                    if (doc.RootElement.TryGetProperty("adventure_mode", out var el))
+                    {
+                        if (el.ValueKind == JsonValueKind.True) return true;
+                        if (el.ValueKind == JsonValueKind.False) return false;
+                        if (el.ValueKind == JsonValueKind.String)
+                            return bool.TryParse(el.GetString(), out var b) && b;
+                    }
+                }
+            }
+            catch { /* treat unreadable module.json as non-adventure */ }
+            return false;
+        }
+
+        /// <summary>Counts pets in monster.json (0 on any error).</summary>
+        private int CountPets()
+        {
+            try
+            {
+                string monsterPath = Path.Combine(_modulePath, "monster.json");
+                if (!File.Exists(monsterPath))
+                    return 0;
+                using (var doc = JsonDocument.Parse(File.ReadAllText(monsterPath)))
+                {
+                    if (doc.RootElement.TryGetProperty("monster", out var arr)
+                        && arr.ValueKind == JsonValueKind.Array)
+                        return arr.GetArrayLength();
+                }
+            }
+            catch { /* malformed monster.json counts as zero pets */ }
+            return 0;
+        }
+
+        /// <summary>Counts battlers in battle.json that are NOT special encounters (0 on any error).</summary>
+        private int CountNonSpecialEnemies()
+        {
+            try
+            {
+                string battlePath = Path.Combine(_modulePath, "battle.json");
+                if (!File.Exists(battlePath))
+                    return 0;
+                using (var doc = JsonDocument.Parse(File.ReadAllText(battlePath)))
+                {
+                    if (doc.RootElement.TryGetProperty("enemies", out var arr)
+                        && arr.ValueKind == JsonValueKind.Array)
+                    {
+                        int count = 0;
+                        foreach (var enemy in arr.EnumerateArray())
+                        {
+                            bool special = enemy.TryGetProperty("special_encounter", out var se)
+                                && se.ValueKind == JsonValueKind.True;
+                            if (!special)
+                                count++;
+                        }
+                        return count;
+                    }
+                }
+            }
+            catch { /* malformed battle.json counts as zero battlers */ }
+            return 0;
+        }
+
         private void SetLoading(bool loading)
         {
             progressBar.Visible = loading;
-            btnPublish.Enabled = !loading && !string.IsNullOrEmpty(_action) && 
+            btnPublish.Enabled = !loading && !string.IsNullOrEmpty(_action) &&
                 (_action == "create_new" || _action == "update_existing") &&
                 _currentStatus != "banned";
             btnUnpublish.Enabled = !loading && btnUnpublish.Visible && _currentStatus != "banned";

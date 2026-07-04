@@ -111,6 +111,7 @@
     <Compile Include="controls\AtkComboItem.cs" />
     <Compile Include="docgenerators\BackgroundGenerator.cs" />
     <Compile Include="docgenerators\ChartGenerator.cs" />
+    <Compile Include="docgenerators\CollectionGenerator.cs" />
     <Compile Include="docgenerators\EnemyGenerator.cs" />
     <Compile Include="docgenerators\GeneratorUtils.cs" />
     <Compile Include="docgenerators\HomeGenerator.cs" />
@@ -174,6 +175,7 @@
       <DependentUpon>EvolutionsEditorForm.cs</DependentUpon>
     </Compile>
     <Compile Include="models\BattleEnemy.cs" />
+    <Compile Include="models\Card.cs" />
     <Compile Include="models\Evolution.cs" />
     <Compile Include="models\Item.cs" />
     <Compile Include="models\Module.cs" />
@@ -196,6 +198,9 @@
     <Compile Include="controls\EnemyAddDialog.cs">
       <SubType>Form</SubType>
     </Compile>
+    <Compile Include="tabs\CollectionTab.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
     <Compile Include="tabs\ItemTab.cs">
       <SubType>UserControl</SubType>
     </Compile>
@@ -210,6 +215,21 @@
     </Compile>
     <Compile Include="tabs\QuestEventTab.cs">
       <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Include="utils\ClipboardListUtils.cs" />
+    <Compile Include="digimondb\DigimonDbClient.cs" />
+    <Compile Include="digimondb\DigimonDb.cs" />
+    <Compile Include="digimondb\DigimonPetFactory.cs" />
+    <Compile Include="digimondb\ModuleSyncService.cs" />
+    <Compile Include="digimondb\LocalSpriteUpdater.cs" />
+    <Compile Include="digimondb\DigimonReportForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="digimondb\AddPetForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="digimondb\SpriteUpdateForm.cs">
+      <SubType>Form</SubType>
     </Compile>
     <Compile Include="utils\PetUtils.cs" />
     <Compile Include="controls\StageSelectForm.cs">
@@ -263,11 +283,17 @@
     <Content Include="assets\Skull.png">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
+    <Content Include="digimondb\custom_matches.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
     <Content Include="favicon.ico" />
     <Content Include="template\backgrounds.html">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
     <Content Include="template\charts.html">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="template\collection.html">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
     <Content Include="template\enemies.html">

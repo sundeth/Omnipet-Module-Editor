@@ -16,7 +16,7 @@ namespace OmnipetModuleEditor.Tabs
     /// <summary>
     /// Tab for managing and editing battle enemies in the module.
     /// </summary>
-    public partial class BattleTab : UserControl
+    public partial class BattleTab : UserControl, IListClipboardTarget
     {
         // Fields
         private List<BattleEnemy> enemies;
@@ -27,7 +27,6 @@ namespace OmnipetModuleEditor.Tabs
         private BattleEnemy copiedEnemy = null;
         private Button btnFastEditor;
         private Button btnSpecialEncounters;
-        private Button btnUpdateAtkSprites;
         private PetSpritePanel spritePanel;
         private BattleEnemy selectedEnemy = null;
         private int lastSearchIndex = -1;
@@ -46,7 +45,6 @@ namespace OmnipetModuleEditor.Tabs
             enemyListPanel.BtnAdd.Click += BtnAdd_Click;
             btnFastEditor.Click += BtnFastEditor_Click;
             btnSpecialEncounters.Click += BtnSpecialEncounters_Click;
-            btnUpdateAtkSprites.Click += BtnUpdateAtkSprites_Click;
             enemyListPanel.BtnGo.Click += (s, e) => SearchGo();
             enemyListPanel.BtnPrev.Click += (s, e) => SearchPrevNext(-1);
             enemyListPanel.BtnNext.Click += (s, e) => SearchPrevNext(1);
@@ -107,14 +105,6 @@ namespace OmnipetModuleEditor.Tabs
                 Margin = new Padding(8, 16, 8, 8),
                 Anchor = AnchorStyles.Right
             };
-            btnUpdateAtkSprites = new Button
-            {
-                Text = "Update Atk Sprites",
-                Width = 140,
-                Height = 32,
-                Margin = new Padding(8, 16, 8, 8),
-                Anchor = AnchorStyles.Right
-            };
             var bottomPanel = new FlowLayoutPanel
             {
                 Dock = DockStyle.Bottom,
@@ -123,7 +113,6 @@ namespace OmnipetModuleEditor.Tabs
             };
             bottomPanel.Controls.Add(btnFastEditor);
             bottomPanel.Controls.Add(btnSpecialEncounters);
-            bottomPanel.Controls.Add(btnUpdateAtkSprites);
 
             rightPanel.Controls.Add(enemyEditPanel);
             rightPanel.Controls.Add(spritePanel);
@@ -446,6 +435,15 @@ namespace OmnipetModuleEditor.Tabs
             fastEditor.ShowDialog();
         }
 
+        /// <summary>Edit menu: open the enemy (fast) editor for normal battlers.</summary>
+        public void OpenEnemyEditor() => BtnFastEditor_Click(this, EventArgs.Empty);
+
+        /// <summary>Edit menu: open the special-encounters editor.</summary>
+        public void OpenSpecialEncounters() => BtnSpecialEncounters_Click(this, EventArgs.Empty);
+
+        /// <summary>Tools menu: copy each enemy's attack sprites from the matching pet.</summary>
+        public void UpdateAtkSprites() => BtnUpdateAtkSprites_Click(this, EventArgs.Empty);
+
         private void BtnUpdateAtkSprites_Click(object sender, EventArgs e)
         {
             if (enemies == null || enemies.Count == 0)
@@ -610,13 +608,18 @@ namespace OmnipetModuleEditor.Tabs
         {
             if (copiedEnemy == null) return;
             var newEnemy = CloneEnemy(copiedEnemy);
-            newEnemy.Name += Properties.Resources.BattleTab_CopySuffix ?? " Copy";
             enemies.Add(newEnemy);
             SortEnemies();
             PopulateEnemyPanel();
             Save();
             SelectEnemy(newEnemy);
         }
+
+        /// <summary>Ctrl+C — copy the selected enemy into the paste buffer.</summary>
+        public void CopySelection() => BtnCopy_Click(this, EventArgs.Empty);
+
+        /// <summary>Ctrl+V — paste a duplicate of the copied enemy.</summary>
+        public void PasteClipboard() => BtnPaste_Click(this, EventArgs.Empty);
 
         private void BtnAdd_Click(object sender, EventArgs e)
         {
