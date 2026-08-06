@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Devices</title>
+    <link rel="stylesheet" href="module.css">
+    <style>
+        .devices-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(390px,1fr)); gap:20px; }
+        .device-card { display:flex; gap:16px; padding:16px; background:#fff; border:1px solid #d8d8d8; border-radius:10px; box-shadow:0 2px 7px rgba(0,0,0,.08); }
+        .device-preview { position:relative; flex:0 0 150px; min-height:125px; overflow:hidden; border:1px solid #555; background:#292929; display:flex; align-items:center; justify-content:center; }
+        .device-background { position:absolute; transform-origin:top left; image-rendering:pixelated; }
+        .device-sprite { position:relative; z-index:1; max-width:105px; max-height:80px; image-rendering:pixelated; }
+        .missing-device-sprite { position:relative; z-index:1; color:#fff; font-size:.9em; }
+        .device-details { flex:1; min-width:0; }
+        .device-details h2 { margin:0 0 8px; font-size:1.25em; }
+        .device-details p { margin:4px 0; }
+        .device-eggs { display:flex; flex-wrap:wrap; gap:5px; margin-top:12px; }
+        .device-egg { width:48px; height:48px; position:relative; border:1px solid #888; background:#fff; display:flex; align-items:center; justify-content:center; }
+        .device-egg img { width:46px; height:46px; object-fit:contain; image-rendering:pixelated; }
+        .device-egg-missing { color:#666; font-size:10px; text-align:center; }
+        .device-egg span { position:absolute; bottom:0; right:0; padding:1px 3px; color:#fff; background:rgba(0,0,0,.72); font-size:10px; }
+        @media (max-width:500px) { .device-card { flex-direction:column; } .device-preview { flex-basis:125px; } }
+    </style>
+</head>
+<body>
+    <div class="page-content">
+        <h1>Module Devices</h1>
+        <div class="devices-grid">#DEVICESDATA</div>
+    </div>
+</body>
+</html>

@@ -371,7 +371,8 @@ namespace OmnipetModuleEditor.Tabs
                 AtkMain = enemy.AtkMain,
                 AtkAlt = enemy.AtkAlt,
                 AtkAlt2 = enemy.AtkAlt2,
-                SpecialEncounter = enemy.SpecialEncounter
+                SpecialEncounter = enemy.SpecialEncounter,
+                Friend = enemy.Friend
             };
         }
 
@@ -797,6 +798,7 @@ namespace OmnipetModuleEditor.Tabs
             private ComboBox CmbAtkAlt;
             private ComboBox CmbAtkAlt2;
             private CheckBox ChkSpecialEncounter;
+            private CheckBox ChkFriend;
             private Dictionary<int, Image> atkSprites = new Dictionary<int, Image>();
             private Dictionary<int, Image> atkCritSprites = new Dictionary<int, Image>();
 
@@ -883,6 +885,7 @@ namespace OmnipetModuleEditor.Tabs
                 NumHp        = new NumericUpDown { Minimum = 0, Maximum = 999999, Value = 1 };
                 CmbPrize     = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList };
                 TxtUnlock    = new TextBox();
+                ChkFriend    = new CheckBox { Checked = false, AutoSize = true };
 
                 // --- Left column: Name, Stage, Attribute, Power, Handicap, Main Attack, Alt Attack, Crit Attack ---
                 AddField("Name:",        TxtName,      0, 0);
@@ -902,6 +905,7 @@ namespace OmnipetModuleEditor.Tabs
                 AddField("Prize:",         CmbPrize,            1, 4);
                 AddField("Unlock:",        TxtUnlock,           1, 5);
                 AddField("HP:",            NumHp,               1, 6);
+                AddField("Friend:",        ChkFriend,           1, 7);
 
                 // Save/Cancel buttons span all 4 columns
                 var buttonPanel = new FlowLayoutPanel
@@ -978,6 +982,7 @@ namespace OmnipetModuleEditor.Tabs
                 CmbAtkAlt2.SelectedIndex = FindAtkComboIndex(CmbAtkAlt2, enemy.AtkAlt2);
                 ChkSpecialEncounter.Checked = enemy.SpecialEncounter;
                 NumRound.Enabled = !enemy.SpecialEncounter;
+                ChkFriend.Checked = enemy.Friend;
             }
 
             public void SaveToEnemy(BattleEnemy enemy)
@@ -999,6 +1004,7 @@ namespace OmnipetModuleEditor.Tabs
                 enemy.AtkAlt2 = (CmbAtkAlt2.SelectedItem as AtkComboItem)?.Number ?? 0;
                 enemy.SpecialEncounter = ChkSpecialEncounter.Checked;
                 if (enemy.SpecialEncounter) enemy.Round = 1;
+                enemy.Friend = ChkFriend.Checked;
             }
 
             public void LoadAtkSprites(string modulePath, string primaryFormat = null)

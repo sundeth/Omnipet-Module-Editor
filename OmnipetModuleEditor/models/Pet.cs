@@ -80,6 +80,12 @@ namespace OmnipetModuleEditor.Models
         [JsonPropertyName("hp")]
         public int Hp { get; set; }
 
+        /// <summary>Which round the special move fires on, and so which
+        /// round earns +2 AP: Stoic 1, Active 2, Normal 3, Indoor 4,
+        /// Lazy 5. Devices with no personality data use Normal.</summary>
+        [JsonPropertyName("personality")]
+        public string Personality { get; set; } = "Normal";
+
         [JsonPropertyName("star")]
         public int Star { get; set; }
 
@@ -91,6 +97,17 @@ namespace OmnipetModuleEditor.Models
 
         [JsonPropertyName("evolve")]
         public List<Evolution> Evolve { get; set; }
+
+        /// <summary>Battle-only temporary evolutions (Mode Change / Xros).</summary>
+        [JsonPropertyName("temporary-evolution")]
+        public List<TempEvolution> TempEvolve { get; set; }
+
+        /// <summary>
+        /// "Normal" (null — not saved), "Unobtainable" (never appears in the
+        /// digidex) or "Friend" (digidex "Friends" list; used by Xros).
+        /// </summary>
+        [JsonPropertyName("avaliability")]
+        public string Avaliability { get; set; }
     }
 
     public enum StageEnum

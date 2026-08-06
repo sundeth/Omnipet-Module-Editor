@@ -387,6 +387,7 @@ namespace OmnipetModuleEditor.docgenerators
                     addRow('Stage', getStageDisplayName(pet.stage), 'Evolution stage: 0=Egg, 1=Baby, 2=Baby II, 3=Child, 4=Adult, 5=Perfect, 6=Ultimate, 7=Super, 8=Super+');
                     addRow('Version', pet.version, 'Version roster this pet belongs to. Different versions may have different evolution paths and requirements.');
                     addRow('Attribute', pet.attribute || 'Free', 'Type advantage in battle: Data > Virus > Vaccine > Data. Free has no advantage/disadvantage.');
+                addRow('Personality', pet.personality || 'Normal', 'Which battle round the special move fires on, earning +2 AP that round: Stoic 1, Active 2, Normal 3, Indoor 4, Lazy 5.');
                     addRow('Special', pet.special ? 'Yes' : 'No', 'Special pets often have unique evolution requirements or unlock conditions.');
                     if (pet.special && pet.specialKey) addRow('Special Key', pet.specialKey, 'Unique identifier for special evolution or unlock conditions.');
                     addRow('Power', pet.power, 'Base battle power. Higher power increases damage output and battle effectiveness.');

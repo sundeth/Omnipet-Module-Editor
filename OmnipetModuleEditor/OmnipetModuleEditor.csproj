@@ -31,6 +31,7 @@
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <PlatformTarget>AnyCPU</PlatformTarget>
+    <Prefer32Bit>false</Prefer32Bit>
     <DebugSymbols>true</DebugSymbols>
     <DebugType>full</DebugType>
     <Optimize>false</Optimize>
@@ -41,6 +42,7 @@
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <PlatformTarget>AnyCPU</PlatformTarget>
+    <Prefer32Bit>false</Prefer32Bit>
     <DebugType>pdbonly</DebugType>
     <Optimize>true</Optimize>
     <OutputPath>bin\Release\</OutputPath>
@@ -110,6 +112,7 @@
   <ItemGroup>
     <Compile Include="controls\AtkComboItem.cs" />
     <Compile Include="docgenerators\BackgroundGenerator.cs" />
+    <Compile Include="docgenerators\DeviceGenerator.cs" />
     <Compile Include="docgenerators\ChartGenerator.cs" />
     <Compile Include="docgenerators\CollectionGenerator.cs" />
     <Compile Include="docgenerators\EnemyGenerator.cs" />
@@ -147,6 +150,9 @@
     <Compile Include="omninet\forms\ManageContributorsForm.cs">
       <SubType>Form</SubType>
     </Compile>
+    <Compile Include="omninet\forms\ModuleBrowserForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
     <Compile Include="omninet\forms\PublishModuleForm.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -165,7 +171,11 @@
     <Compile Include="tabs\editors\EnemyFastEditorForm.Designer.cs">
       <DependentUpon>EnemyFastEditorForm.cs</DependentUpon>
     </Compile>
+    <Compile Include="tabs\editors\EvolutionBoxRenderer.cs" />
     <Compile Include="tabs\editors\EvolutionCriteriaForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="tabs\editors\EvolutionOrderForm.cs">
       <SubType>Form</SubType>
     </Compile>
     <Compile Include="tabs\editors\EvolutionsEditorForm.cs">
@@ -174,10 +184,16 @@
     <Compile Include="tabs\editors\EvolutionsEditorForm.Designer.cs">
       <DependentUpon>EvolutionsEditorForm.cs</DependentUpon>
     </Compile>
+    <Compile Include="tabs\editors\TempEvolutionCriteriaForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
     <Compile Include="models\BattleEnemy.cs" />
     <Compile Include="models\Card.cs" />
+    <Compile Include="models\Device.cs" />
     <Compile Include="models\Evolution.cs" />
+    <Compile Include="models\TempEvolution.cs" />
     <Compile Include="models\Item.cs" />
+    <Compile Include="models\Password.cs" />
     <Compile Include="models\Module.cs" />
     <Compile Include="models\Pet.cs" />
     <Compile Include="models\PetTemplates.cs" />
@@ -207,6 +223,9 @@
     <Compile Include="tabs\BattleTab.cs">
       <SubType>UserControl</SubType>
     </Compile>
+    <Compile Include="tabs\DeviceTab.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
     <Compile Include="tabs\ModuleTab.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -214,6 +233,9 @@
       <SubType>UserControl</SubType>
     </Compile>
     <Compile Include="tabs\QuestEventTab.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Include="tabs\PasswordTab.cs">
       <SubType>UserControl</SubType>
     </Compile>
     <Compile Include="utils\ClipboardListUtils.cs" />
@@ -288,6 +310,9 @@
     </Content>
     <Content Include="favicon.ico" />
     <Content Include="template\backgrounds.html">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="template\devices.html">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
     <Content Include="template\charts.html">

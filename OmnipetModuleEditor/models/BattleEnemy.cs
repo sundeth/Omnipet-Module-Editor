@@ -46,4 +46,11 @@ public class BattleEnemy
 
     [JsonPropertyName("special_encounter")]
     public bool SpecialEncounter { get; set; }
+
+    /// <summary>
+    /// Battling this enemy registers it in the player's per-module Friend
+    /// list (used by Xros temporary evolutions and the digidex Friends view).
+    /// </summary>
+    [JsonPropertyName("friend")]
+    public bool Friend { get; set; }
 }

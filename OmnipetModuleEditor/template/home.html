@@ -102,12 +102,36 @@
                     <h2>Main Settings</h2>
                     <ul class="attribute-list">
                         <li class="attribute-item">
-                            <span class="attribute-label tooltip">Ruleset:
-                                <span class="tooltiptext">Defines the type of mini-game used in the module's Adventure Mode and the way traited eggs are obtained. Also defines the bonuses for power.</span>
+                            <span class="attribute-label tooltip">Traited Egg Rule:
+                                <span class="tooltiptext">How this device grants a Traited Egg &mdash; a chance roll on Stage V and up, a win-ratio threshold, a timer since the last evolution, or outliving the pet's lifespan.</span>
                             </span>
-                            <span class="attribute-value">#MODULERULESET</span>
+                            <span class="attribute-value">#MODULETRAITEDEGGRULE</span>
                         </li>
                         <li class="attribute-item">
+                            <span class="attribute-label tooltip">Power Bonus Rule:
+                                <span class="tooltiptext">Where battle power above the species base comes from &mdash; full Strength Hearts paying a per-stage table, a flat amount per heart, the level steps, the original Pendulum's effort stat, or Vital Bracelet stars.</span>
+                            </span>
+                            <span class="attribute-value">#MODULEPOWERBONUSRULE</span>
+                        </li>
+                                                <li class="attribute-item">
+                            <span class="attribute-label tooltip">Training Strength Gain:
+                                <span class="tooltiptext">Strength given at each training outcome &mdash; Bad, Good, Great, Excellent. "full" means the meter is filled outright.</span>
+                            </span>
+                            <span class="attribute-value">#MODULETRAININGSTRENGTHGAIN</span>
+                        </li>
+                        <li class="attribute-item">
+                            <span class="attribute-label tooltip">Training Weight Loss:
+                                <span class="tooltiptext">Weight shed at each training outcome &mdash; Bad, Good, Great, Excellent.</span>
+                            </span>
+                            <span class="attribute-value">#MODULETRAININGWEIGHTLOSS</span>
+                        </li>
+                        <li class="attribute-item">
+                            <span class="attribute-label tooltip">Training Effort Gain:
+                                <span class="tooltiptext">Effort given at each training outcome. Most devices credit a failed training; the original Pendulum only credits a successful one.</span>
+                            </span>
+                            <span class="attribute-value">#MODULETRAININGEFFORTGAIN</span>
+                        </li>
+<li class="attribute-item">
                             <span class="attribute-label tooltip">Traited Egg Starting Level:
                                 <span class="tooltiptext">Initial level for pets hatched from traited eggs. Higher levels provide stat bonuses including increased HP, power, and attack values.</span>
                             </span>
@@ -240,6 +264,12 @@
                                 <span class="tooltiptext">The amount of the battle resource will be consumed when battling.</span>
                             </span>
                             <span class="attribute-value #MODULEBATTLECOSTAMOUNTCLASS">#MODULEBATTLECOSTAMOUNT</span>
+                        </li>
+                        <li class="attribute-item">
+                            <span class="attribute-label tooltip">Battle Weight Loss:
+                                <span class="tooltiptext">Weight in grams the pet loses after every battle, on top of the battle cost. 0 disables it. The original Digital Monster loses 4g per battle.</span>
+                            </span>
+                            <span class="attribute-value #MODULEBATTLEWEIGHTLOSSCLASS">#MODULEBATTLEWEIGHTLOSS</span>
                         </li>
                         <li class="attribute-item">
                             <span class="attribute-label tooltip">Base Sick Chance Win:

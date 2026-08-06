@@ -736,9 +736,11 @@ namespace OmnipetModuleEditor.Tabs
             public NumericUpDown NumHealDoses;
             public NumericUpDown NumPower;
             public ComboBox CmbAttribute;
+        public ComboBox CmbPersonality;
             public NumericUpDown NumConditionHearts;
             public CheckBox ChkJogress;
             public NumericUpDown NumHp;
+            public ComboBox CmbAvaliability;
 
             // VB-specific fields - NEW
             public NumericUpDown NumStar;
@@ -827,6 +829,9 @@ namespace OmnipetModuleEditor.Tabs
                 NumPower.Value = Math.Max(NumPower.Minimum, pet.Power);
                 CmbAttribute.SelectedItem = pet.Attribute ?? "";
                 CmbAttribute.SelectedIndex = (int)PetUtils.JsonToAttributeEnum(pet.Attribute ?? "");
+            CmbPersonality.SelectedItem = string.IsNullOrEmpty(pet.Personality)
+                ? "Normal" : pet.Personality;
+            if (CmbPersonality.SelectedIndex < 0) CmbPersonality.SelectedIndex = 2;
                 NumConditionHearts.Value = Math.Max(NumConditionHearts.Minimum, pet.ConditionHearts);
                 ChkJogress.Checked = pet.JogressAvaliable;
                 NumHp.Value = Math.Max(NumHp.Minimum, pet.Hp);
@@ -835,6 +840,10 @@ namespace OmnipetModuleEditor.Tabs
                 NumStar.Value = Math.Max(NumStar.Minimum, pet.Star);
                 NumAttack.Value = Math.Max(NumAttack.Minimum, pet.Attack);
                 NumCriticalTurn.Value = Math.Max(NumCriticalTurn.Minimum, pet.CriticalTurn);
+
+                // Availability — null/unknown means Normal
+                int availIdx = CmbAvaliability.Items.IndexOf(pet.Avaliability ?? "Normal");
+                CmbAvaliability.SelectedIndex = availIdx >= 0 ? availIdx : 0;
             }
 
             // Helper to normalize time format
@@ -884,7 +893,8 @@ namespace OmnipetModuleEditor.Tabs
                 pet.StrengthLoss = (int)NumStrengthLoss.Value;
                 pet.HealDoses = (int)NumHealDoses.Value;
                 pet.Power = (int)NumPower.Value;
-                if (CmbAttribute.SelectedIndex >= 0)
+                pet.Personality = CmbPersonality.SelectedItem as string ?? "Normal";
+            if (CmbAttribute.SelectedIndex >= 0)
                     pet.Attribute = PetUtils.AttributeEnumToJson((AttributeEnum)CmbAttribute.SelectedIndex);
                 else
                     pet.Attribute = "";
@@ -896,6 +906,10 @@ namespace OmnipetModuleEditor.Tabs
                 pet.Star = (int)NumStar.Value;
                 pet.Attack = (int)NumAttack.Value;
                 pet.CriticalTurn = (int)NumCriticalTurn.Value;
+
+                // Availability — "Normal" is the default and isn't saved
+                string avail = CmbAvaliability.SelectedItem?.ToString();
+                pet.Avaliability = (string.IsNullOrEmpty(avail) || avail == "Normal") ? null : avail;
             }
 
             // Função auxiliar para validar hora no formato HH:mm
@@ -972,7 +986,13 @@ namespace OmnipetModuleEditor.Tabs
                 NumIndex = new NumericUpDown { Minimum = -1, Maximum = 9999, Value = 0 };  // NEW: Index field
                 NumVersion = new NumericUpDown { Minimum = 0, Value = 1 };
                 NumTime = new NumericUpDown { Minimum = 1, Value = 1, Maximum = 99999 };
-                CmbAttribute = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList };
+                // Which round the special move fires on, and so which round
+            // earns +2 AP. Devices with no personality data use Normal.
+            CmbPersonality = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList };
+            CmbPersonality.Items.AddRange(new object[] {
+                "Stoic", "Active", "Normal", "Indoor", "Lazy" });
+            CmbPersonality.SelectedIndex = 2;
+            CmbAttribute = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList };
                 CmbAttribute.Items.AddRange(Enum.GetNames(typeof(OmnipetModuleEditor.Models.AttributeEnum)));
                 NumEnergy = new NumericUpDown { Minimum = 0, Value = 0 };
                 TxtSleeps = new MaskedTextBox { Mask = "00:00" };
@@ -992,7 +1012,14 @@ namespace OmnipetModuleEditor.Tabs
                 NumPower = new NumericUpDown { Minimum = 0, Value = 0, Maximum = 300 };
                 NumHp = new NumericUpDown { Minimum = 0, Value = 0 };
                 NumHungerLoss = new NumericUpDown { Minimum = 2, Value = 4, Maximum = 99999 };
-                NumStomach = new NumericUpDown { Minimum = 2, Value = 4 };
+                NumStomach = new NumericUpDown { Minimum = 0, Value = 4 };
+                // Eggs (stage 0) can't eat, so default their stomach to 0 when
+                // the stage is set to egg.
+                CmbStage.SelectedIndexChanged += (s, e) =>
+                {
+                    if (CmbStage.SelectedIndex == 0)
+                        NumStomach.Value = 0;
+                };
                 NumStrengthLoss = new NumericUpDown { Minimum = 2, Value = 4, Maximum = 99999 };
                 NumMinWeight = new NumericUpDown { Minimum = 5, Value = 5 };
                 NumEvolWeight = new NumericUpDown { Minimum = 0, Value = 0, Maximum = 99 };
@@ -1006,6 +1033,10 @@ namespace OmnipetModuleEditor.Tabs
                 NumAttack = new NumericUpDown { Minimum = 0, Value = 1, Maximum = 99 };
                 NumCriticalTurn = new NumericUpDown { Minimum = 0, Value = 0, Maximum = 99 };
 
+                CmbAvaliability = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 110 };
+                CmbAvaliability.Items.AddRange(new object[] { "Normal", "Unobtainable", "Friend" });
+                CmbAvaliability.SelectedIndex = 0;
+
                 // Add fields - REORGANIZED: Attack and Critical Turn moved to second column
                 AddField("Name:", TxtName);
                 AddField("Special:", ChkSpecial);
@@ -1016,6 +1047,7 @@ namespace OmnipetModuleEditor.Tabs
                 AddField("Version:", NumVersion);
                 AddField("Energy:", NumEnergy);
                 AddField("Attribute:", CmbAttribute);
+            AddField("Personality:", CmbPersonality);
                 AddField("Sleeps:", TxtSleeps);
                 AddField("ATK Main:", CmbAtkMain);
                 AddField("Wakes:", TxtWakes);
@@ -1032,6 +1064,7 @@ namespace OmnipetModuleEditor.Tabs
                 AddField("Condition Hearts:", NumConditionHearts);
                 AddField("Heal Doses:", NumHealDoses);
                 AddField("Jogress Available:", ChkJogress);
+                AddField("Avaliability:", CmbAvaliability);
                 AddField("Star:", NumStar);
                 // VB-specific fields - Attack and Critical Turn in second column
                 AddField("Attack:", NumAttack);

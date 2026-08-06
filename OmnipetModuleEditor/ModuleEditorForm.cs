@@ -183,6 +183,14 @@ namespace OmnipetModuleEditor
             moduleTab.Controls.Add(moduleTabControl);
             tabControlMain.TabPages.Add(moduleTab);
 
+            var deviceControl = new DeviceTab();
+            deviceControl.Dock = DockStyle.Fill;
+            deviceControl.SetModule(currentPath, currentModule);
+
+            var deviceTab = new TabPage("Device");
+            deviceTab.Controls.Add(deviceControl);
+            tabControlMain.TabPages.Add(deviceTab);
+
             petControl = new PetTab();
             petControl.Dock = DockStyle.Fill;
             petControl.SetModule(currentPath, currentModule);
@@ -232,6 +240,14 @@ namespace OmnipetModuleEditor
             var questEventTab = new TabPage("Quests/Events");
             questEventTab.Controls.Add(questEventControl);
             tabControlMain.TabPages.Add(questEventTab);
+
+            var passwordControl = new PasswordTab();
+            passwordControl.Dock = DockStyle.Fill;
+            passwordControl.SetModule(currentPath, currentModule);
+
+            var passwordTab = new TabPage("Passwords");
+            passwordTab.Controls.Add(passwordControl);
+            tabControlMain.TabPages.Add(passwordTab);
         }
 
         /// <summary>Tools ▸ Import Collection from Module — merges another
@@ -246,6 +262,8 @@ namespace OmnipetModuleEditor
             try
             {
                 HTMLGenerator.GenerateDocumentation(currentPath);
+                OmnipetModuleEditor.docgenerators.DeviceGenerator.GenerateDevicesPage(
+                    Path.Combine(currentPath, "documentation"), currentPath);
                 MessageBox.Show("The module's documents were generated", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             catch (Exception ex)
@@ -572,6 +590,28 @@ namespace OmnipetModuleEditor
             }
 
             using (var form = new PublishModuleForm(currentPath, currentModule.Name, currentModule.Version))
+            {
+                form.ShowDialog(this);
+            }
+        }
+
+        /// <summary>
+        /// Opens the module browser (Omninet ▸ Manage Modules): all modules
+        /// published on Omninet vs what is installed in the game's modules
+        /// folder, with per-row download. Works without being logged in —
+        /// login only enriches the Ownership column.
+        /// </summary>
+        private void manageModules_Click(object sender, EventArgs e)
+        {
+            string modulesRoot = Directory.GetParent(currentPath)?.FullName;
+            if (string.IsNullOrEmpty(modulesRoot) || !Directory.Exists(modulesRoot))
+            {
+                MessageBox.Show("Could not resolve the game's modules folder.",
+                    "Manage Modules", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            using (var form = new ModuleBrowserForm(modulesRoot, Path.GetFileName(currentPath)))
             {
                 form.ShowDialog(this);
             }

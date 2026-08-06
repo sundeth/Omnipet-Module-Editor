@@ -22,6 +22,7 @@ namespace OmnipetModuleEditor
         private System.Windows.Forms.ToolStripMenuItem menuOmninet;
         private System.Windows.Forms.ToolStripMenuItem menuAccount;
         private System.Windows.Forms.ToolStripMenuItem menuManageModule;
+        private System.Windows.Forms.ToolStripMenuItem menuManageModules;
         private System.Windows.Forms.ToolStripMenuItem menuEdit;
         private System.Windows.Forms.ToolStripMenuItem menuEditEvolutions;
         private System.Windows.Forms.ToolStripMenuItem menuEnemyEditor;
@@ -75,6 +76,7 @@ namespace OmnipetModuleEditor
             this.menuOmninet = new System.Windows.Forms.ToolStripMenuItem();
             this.menuAccount = new System.Windows.Forms.ToolStripMenuItem();
             this.menuManageModule = new System.Windows.Forms.ToolStripMenuItem();
+            this.menuManageModules = new System.Windows.Forms.ToolStripMenuItem();
             this.menuEdit = new System.Windows.Forms.ToolStripMenuItem();
             this.menuEditEvolutions = new System.Windows.Forms.ToolStripMenuItem();
             this.menuEnemyEditor = new System.Windows.Forms.ToolStripMenuItem();
@@ -206,7 +208,8 @@ namespace OmnipetModuleEditor
             //
             this.menuOmninet.DropDownItems.AddRange(new System.Windows.Forms.ToolStripItem[] {
                 this.menuAccount,
-                this.menuManageModule});
+                this.menuManageModule,
+                this.menuManageModules});
             this.menuOmninet.Name = "menuOmninet";
             this.menuOmninet.Size = new System.Drawing.Size(62, 20);
             this.menuOmninet.Text = "Omninet";
@@ -226,6 +229,14 @@ namespace OmnipetModuleEditor
             this.menuManageModule.Size = new System.Drawing.Size(180, 22);
             this.menuManageModule.Text = "Manage Module";
             this.menuManageModule.Click += new System.EventHandler(this.manageModule_Click);
+            //
+            // menuManageModules
+            //
+            this.menuManageModules.Name = "menuManageModules";
+            this.menuManageModules.ShortcutKeys = ((System.Windows.Forms.Keys)(((System.Windows.Forms.Keys.Control | System.Windows.Forms.Keys.Shift) | System.Windows.Forms.Keys.L)));
+            this.menuManageModules.Size = new System.Drawing.Size(180, 22);
+            this.menuManageModules.Text = "Module Library";
+            this.menuManageModules.Click += new System.EventHandler(this.manageModules_Click);
             //
             // menuEdit
             //
