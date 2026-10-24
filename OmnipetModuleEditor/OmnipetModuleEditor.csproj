@@ -193,6 +193,7 @@
     <Compile Include="models\Evolution.cs" />
     <Compile Include="models\TempEvolution.cs" />
     <Compile Include="models\Item.cs" />
+    <Compile Include="models\Shop.cs" />
     <Compile Include="models\Password.cs" />
     <Compile Include="models\Module.cs" />
     <Compile Include="models\Pet.cs" />
@@ -218,6 +219,9 @@
       <SubType>UserControl</SubType>
     </Compile>
     <Compile Include="tabs\ItemTab.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Include="tabs\ShopTab.cs">
       <SubType>UserControl</SubType>
     </Compile>
     <Compile Include="tabs\BattleTab.cs">

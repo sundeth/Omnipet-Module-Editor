@@ -45,6 +45,12 @@ namespace OmnipetModuleEditor.Tabs
             enemyListPanel.BtnAdd.Click += BtnAdd_Click;
             btnFastEditor.Click += BtnFastEditor_Click;
             btnSpecialEncounters.Click += BtnSpecialEncounters_Click;
+            // Currencies may have been added on the Shop/Currencies tab since.
+            this.VisibleChanged += (s, e) =>
+            {
+                if (Visible && !string.IsNullOrEmpty(modulePath))
+                    enemyEditPanel.LoadCurrencies(CurrencyNames());
+            };
             enemyListPanel.BtnGo.Click += (s, e) => SearchGo();
             enemyListPanel.BtnPrev.Click += (s, e) => SearchPrevNext(-1);
             enemyListPanel.BtnNext.Click += (s, e) => SearchPrevNext(1);
@@ -131,6 +137,34 @@ namespace OmnipetModuleEditor.Tabs
 
         #region Public API
 
+        /// <summary>The Shop/Currencies tab's currency names, saved or not.
+        /// Falls back to shop.json on disk.</summary>
+        public Func<IEnumerable<string>> CurrencyNamesProvider { get; set; }
+
+        private IEnumerable<string> CurrencyNames()
+        {
+            if (CurrencyNamesProvider != null)
+                return CurrencyNamesProvider();
+            string path = Path.Combine(modulePath ?? "", "shop.json");
+            if (!File.Exists(path))
+                return Enumerable.Empty<string>();
+            try
+            {
+                using (var doc = JsonDocument.Parse(File.ReadAllText(path)))
+                {
+                    if (!doc.RootElement.TryGetProperty("currency", out var list))
+                        return Enumerable.Empty<string>();
+                    return list.EnumerateArray()
+                        .Select(c => c.TryGetProperty("name", out var n) ? n.GetString() : null)
+                        .ToList();
+                }
+            }
+            catch
+            {
+                return Enumerable.Empty<string>();
+            }
+        }
+
         /// <summary>
         /// Sets the module path and loads enemies and related data.
         /// </summary>
@@ -142,6 +176,8 @@ namespace OmnipetModuleEditor.Tabs
             enemyEditPanel.LoadAtkSprites(modulePath, module?.PrimarySpriteFormat);
             enemyEditPanel.PopulateAtkCombos();
             enemyEditPanel.LoadItems(modulePath);
+            enemyEditPanel.LoadCardPacks(modulePath);
+            enemyEditPanel.LoadCurrencies(CurrencyNames());
         }
 
         /// <summary>
@@ -372,7 +408,13 @@ namespace OmnipetModuleEditor.Tabs
                 AtkAlt = enemy.AtkAlt,
                 AtkAlt2 = enemy.AtkAlt2,
                 SpecialEncounter = enemy.SpecialEncounter,
-                Friend = enemy.Friend
+                Friend = enemy.Friend,
+                Currency = enemy.Currency,
+                CurrencyCost = enemy.CurrencyCost,
+                CurrencyReward = enemy.CurrencyReward,
+                PrizeCardPack = enemy.PrizeCardPack,
+                PrizeChance = enemy.PrizeChance,
+                AttackPattern = enemy.AttackPattern != null ? (int[])enemy.AttackPattern.Clone() : null
             };
         }
 
@@ -382,17 +424,17 @@ namespace OmnipetModuleEditor.Tabs
         private void SortEnemies()
         {
             if (enemies == null) return;
-            enemies.Sort((a, b) =>
-            {
-                // Special encounters sort before normal battles
-                int cmp = b.SpecialEncounter.CompareTo(a.SpecialEncounter);
-                if (cmp != 0) return cmp;
-                cmp = a.Version.CompareTo(b.Version);
-                if (cmp != 0) return cmp;
-                cmp = a.Area.CompareTo(b.Area);
-                if (cmp != 0) return cmp;
-                return a.Round.CompareTo(b.Round);
-            });
+            // Special encounters before normal battles. A STABLE sort: enemies
+            // sharing a version, area and round keep their order, and an
+            // adventure round fights its first one (game_module.get_enemies).
+            var sorted = enemies
+                .OrderByDescending(e => e.SpecialEncounter)
+                .ThenBy(e => e.Version)
+                .ThenBy(e => e.Area)
+                .ThenBy(e => e.Round)
+                .ToList();
+            enemies.Clear();
+            enemies.AddRange(sorted);
         }
 
         #endregion
@@ -799,6 +841,32 @@ namespace OmnipetModuleEditor.Tabs
             private ComboBox CmbAtkAlt2;
             private CheckBox ChkSpecialEncounter;
             private CheckBox ChkFriend;
+            private ComboBox CmbCurrency;
+            private NumericUpDown NumCost;
+            private NumericUpDown NumReward;
+            private ComboBox CmbPrizePack;
+            private NumericUpDown NumPrizeChance;
+            private TextBox TxtAttackPattern;
+
+            /// <summary>A cards.json pack in the Prize Pack list; the empty
+            /// one is "no pack".</summary>
+            private class PackItem
+            {
+                public string Id;
+                public string Name;
+                public override string ToString() => Name;
+            }
+
+            /// <summary>What each enemy field does. Kept as a field so it
+            /// outlives the layout code - a ToolTip that goes out of scope
+            /// stops showing.</summary>
+            private readonly ToolTip enemyTips = new ToolTip
+            {
+                AutoPopDelay = 20000,
+                InitialDelay = 300,
+                ReshowDelay = 200,
+                ShowAlways = true
+            };
             private Dictionary<int, Image> atkSprites = new Dictionary<int, Image>();
             private Dictionary<int, Image> atkCritSprites = new Dictionary<int, Image>();
 
@@ -831,11 +899,11 @@ namespace OmnipetModuleEditor.Tabs
                 fieldsPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 185F));
                 fieldsPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 115F));
                 fieldsPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 185F));
-                for (int i = 0; i < 9; i++)
+                for (int i = 0; i < 12; i++)
                     fieldsPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
                 // colPair 0 → columns 0+1 (left), colPair 1 → columns 2+3 (right)
-                void AddField(string label, Control control, int colPair, int rowIdx)
+                void AddField(string label, Control control, int colPair, int rowIdx, string tip = null)
                 {
                     var lbl = new Label
                     {
@@ -855,12 +923,17 @@ namespace OmnipetModuleEditor.Tabs
                     control.Margin = new Padding(0, 2, 8, 2);
                     fieldsPanel.Controls.Add(lbl, colPair * 2, rowIdx);
                     fieldsPanel.Controls.Add(control, colPair * 2 + 1, rowIdx);
+                    if (!string.IsNullOrEmpty(tip))
+                    {
+                        enemyTips.SetToolTip(lbl, tip);
+                        enemyTips.SetToolTip(control, tip);
+                    }
                 }
 
                 // --- Column 1 controls ---
                 TxtName      = new TextBox();
                 CmbStage     = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList };
-                CmbStage.Items.AddRange(Enum.GetNames(typeof(OmnipetModuleEditor.Models.StageEnum)));
+                CmbStage.Items.AddRange(OmnipetModuleEditor.Models.Stages.Names);
                 CmbAttribute = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList };
                 CmbAttribute.Items.AddRange(new object[] { "Free", "Data", "Virus", "Vaccine" });
                 NumPower     = new NumericUpDown { Minimum = 1, Maximum = 999999, Value = 10 };
@@ -877,35 +950,75 @@ namespace OmnipetModuleEditor.Tabs
                 NumArea      = new NumericUpDown { Minimum = 1, Maximum = 999999, Value = 1 };
                 NumRound     = new NumericUpDown { Minimum = 1, Maximum = 999999, Value = 1 };
                 ChkSpecialEncounter = new CheckBox { Checked = false, AutoSize = true };
-                ChkSpecialEncounter.CheckedChanged += (s, e) =>
-                {
-                    if (ChkSpecialEncounter.Checked) NumRound.Value = 1;
-                    NumRound.Enabled = !ChkSpecialEncounter.Checked;
-                };
+                // A special encounter keeps its round: a battle run fights an
+                // area's special rounds in turn (the iC's Coliseum, Digimon
+                // World's arenas), so only a lone encounter is round 1.
                 NumHp        = new NumericUpDown { Minimum = 0, Maximum = 999999, Value = 1 };
                 CmbPrize     = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList };
                 TxtUnlock    = new TextBox();
                 ChkFriend    = new CheckBox { Checked = false, AutoSize = true };
+                CmbCurrency  = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList };
+                CmbCurrency.Items.Add("");
+                NumCost      = new NumericUpDown { Minimum = 0, Maximum = 999999, Value = 0 };
+                NumReward    = new NumericUpDown { Minimum = 0, Maximum = 999999, Value = 0 };
+                // Only a round 1 enemy charges: its cost is the area's entry fee.
+                NumRound.ValueChanged += (s, e) => NumCost.Enabled = NumRound.Value == 1;
+                CmbPrizePack = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList };
+                CmbPrizePack.Items.Add(new PackItem { Id = "", Name = "" });
+                NumPrizeChance = new NumericUpDown { Minimum = 0, Maximum = 100, Value = 100 };
+                TxtAttackPattern = new TextBox();
 
                 // --- Left column: Name, Stage, Attribute, Power, Handicap, Main Attack, Alt Attack, Crit Attack ---
-                AddField("Name:",        TxtName,      0, 0);
-                AddField("Stage:",       CmbStage,     0, 1);
-                AddField("Attribute:",   CmbAttribute, 0, 2);
-                AddField("Power:",       NumPower,     0, 3);
-                AddField("Handicap:",    NumHandicap,  0, 4);
-                AddField("Main Attack:", CmbAtkMain,   0, 5);
-                AddField("Alt Attack:",  CmbAtkAlt,    0, 6);
-                AddField("Crit Attack:", CmbAtkAlt2,   0, 7);
+                AddField("Name:",        TxtName,      0, 0,
+                    "The enemy\u2019s name. It has to match a Digimon name exactly - the sprite is looked up by it, and a Friend encounter is matched to its pet record by name too.");
+                AddField("Stage:",       CmbStage,     0, 1,
+                    "The enemy\u2019s stage. Beating it credits the pet\u2019s Stage-N counter for THIS stage, which the Stage-5..8 evolution criteria read.");
+                AddField("Attribute:",   CmbAttribute, 0, 2,
+                    "Battle attribute: Vaccine beats Virus beats Data beats Vaccine, Free neither gains nor suffers. The module’s Battle Attribute Advantage is added to the hit rate, or to Power with \"as Power\".");
+                AddField("Power:",       NumPower,     0, 3,
+                    "The enemy\u2019s battle power, weighed against the pet\u2019s to decide the hit rate.");
+                AddField("Handicap:",    NumHandicap,  0, 4,
+                    "Percentage points subtracted from the hit rate of whoever attacks this enemy, on top of the power comparison (the devices\u2019 Quest Mode handicap; only adventure battles read it). A POSITIVE handicap makes the enemy harder to hit, so this is the knob for making a boss harder without touching its Power.");
+                AddField("Main Attack:", CmbAtkMain,   0, 5,
+                    "Regular attack sprite. Stored one HIGHER than the device/firmware id, because 0 is reserved for \"no attack sprite\".");
+                AddField("Alt Attack:",  CmbAtkAlt,    0, 6,
+                    "Alternate (big) attack sprite, from the second sprite bank. Same +1 offset as Main Attack.");
+                AddField("Crit Attack:", CmbAtkAlt2,   0, 7,
+                    "Sprite used for the critical attack, on modules that enable one. Same +1 offset.");
 
                 // --- Right column: Version, Area, Round, Sp. Encounter, Prize, Unlock, HP ---
-                AddField("Version:",       NumVersion,          1, 0);
-                AddField("Area:",          NumArea,             1, 1);
-                AddField("Round:",         NumRound,            1, 2);
-                AddField("Sp. Encounter:", ChkSpecialEncounter, 1, 3);
-                AddField("Prize:",         CmbPrize,            1, 4);
-                AddField("Unlock:",        TxtUnlock,           1, 5);
-                AddField("HP:",            NumHp,               1, 6);
-                AddField("Friend:",        ChkFriend,           1, 7);
+                AddField("Version:",       NumVersion,          1, 0,
+                    "Which version roster this enemy belongs to. Enemies are resolved per ROUND, not per version: the game collects every version present on the round and, if the pet\u2019s own version is not among them, picks one at random. So a version does not need a record on every round - but giving one to each round of its own region is what stops a pet drawing the other region\u2019s enemy.");
+                AddField("Area:",          NumArea,             1, 1,
+                    "Adventure area this enemy appears in. Clearing an area is what an \"adventure\" unlock and an evolution\u2019s Area requirement key off.");
+                AddField("Round:",         NumRound,            1, 2,
+                    "Position within the area. Rounds are fought in order, and the round is what the game resolves an enemy on.");
+                AddField("Sp. Encounter:", ChkSpecialEncounter, 1, 3,
+                    "Marks this as a special encounter rather than part of the ordinary round sequence. A special encounter whose name matches a pet with Availability \"Friend\" registers that Friend when beaten. Its Round orders the fights of a battle run event (every special round of the area in turn); a lone encounter is round 1.");
+                AddField("Prize:",         CmbPrize,            1, 4,
+                    "Item awarded for beating this enemy. Leave it empty for no prize - the game hides the prize line entirely rather than showing \"None\".");
+                AddField("Unlock:",        TxtUnlock,           1, 5,
+                    "Name of an unlock this enemy drops when defeated. It must match an unlock declared on the Unlocks tab.");
+                AddField("HP:",            NumHp,               1, 6,
+                    "Hit points - how much damage this enemy absorbs before losing.");
+                AddField("Friend:",        ChkFriend,           1, 7,
+                    "Marks the enemy as a Friend encounter. The Friend itself is declared on the pet side, with Availability \"Friend\"; beating this registers it, and DigiXros requirements read that register.");
+
+                // --- Currency: what the area charges and what the enemy pays ---
+                AddField("Currency:",      CmbCurrency,         0, 8,
+                    "The currency (Shop/Currencies tab) this enemy charges and pays in. Empty: it neither charges nor pays.");
+                AddField("Reward:",        NumReward,           0, 9,
+                    "Currency the pet gains for beating this enemy. A lost battle pays nothing.");
+                AddField("Entry Cost:",    NumCost,             1, 8,
+                    "Currency it costs to enter this enemy\u2019s area, set on its round 1 enemy only (the Digivice iC\u2019s Coliseums charge 0, 100, 500 and 1000 P). Disabled on later rounds.");
+
+                // --- Prize card pack and the prize's drop chance ---
+                AddField("Prize Pack:",    CmbPrizePack,        1, 9,
+                    "A card pack (Collection tab) won for beating this enemy, opened into the collection. A win draws ONE prize at random from those the round\u2019s enemies carry - items and packs alike - and then rolls its chance.");
+                AddField("Prize Chance:",  NumPrizeChance,      0, 10,
+                    "Percent chance this enemy\u2019s prize - item or card pack - drops once it is the one drawn. 100 always drops.");
+                AddField("Attack Pattern:", TxtAttackPattern,   1, 10,
+                    "The attacks this enemy throws in the adventure, one per round, comma-separated, on the module\u2019s battle scale - on the Colour lines 1 is a normal shot and 2 a super one (\"1,2,2,2,2,1\"). The Pendulum Color quests name one per round. Empty: the pattern its stage gives, as before.");
 
                 // Save/Cancel buttons span all 4 columns
                 var buttonPanel = new FlowLayoutPanel
@@ -918,7 +1031,7 @@ namespace OmnipetModuleEditor.Tabs
                 var btnCancel = new Button { Text = "Cancel", Width = 80, Margin = new Padding(8, 8, 8, 8) };
                 buttonPanel.Controls.Add(btnSave);
                 buttonPanel.Controls.Add(btnCancel);
-                fieldsPanel.Controls.Add(buttonPanel, 0, 8);
+                fieldsPanel.Controls.Add(buttonPanel, 0, 11);
                 fieldsPanel.SetColumnSpan(buttonPanel, 4);
 
                 btnSave.Click += (s, e) =>
@@ -959,6 +1072,9 @@ namespace OmnipetModuleEditor.Tabs
                     if (cmb.Items[i] is AtkComboItem item && item.Number == number)
                         return i;
                 }
+                // An id with no sprite is listed rather than saved back as 0.
+                if (number != 0)
+                    return cmb.Items.Add(new AtkComboItem(number, null));
                 return 0;
             }
 
@@ -975,14 +1091,69 @@ namespace OmnipetModuleEditor.Tabs
                 NumRound.Value = Math.Max(NumRound.Minimum, Math.Min(enemy.Round, NumRound.Maximum));
                 NumVersion.Value = Math.Max(NumVersion.Minimum, Math.Min(enemy.Version, NumVersion.Maximum));
                 NumHandicap.Value = Math.Max(NumHandicap.Minimum, Math.Min(enemy.Handicap, NumHandicap.Maximum));
+                // A prize item.json no longer has is kept rather than replaced
+                // by the previous enemy's.
+                if (!string.IsNullOrEmpty(enemy.Prize) && !CmbPrize.Items.Contains(enemy.Prize))
+                    CmbPrize.Items.Add(enemy.Prize);
                 CmbPrize.SelectedItem = enemy.Prize ?? "";
                 TxtUnlock.Text = enemy.Unlock ?? "";
                 CmbAtkMain.SelectedIndex = FindAtkComboIndex(CmbAtkMain, enemy.AtkMain);
                 CmbAtkAlt.SelectedIndex = FindAtkComboIndex(CmbAtkAlt, enemy.AtkAlt);
                 CmbAtkAlt2.SelectedIndex = FindAtkComboIndex(CmbAtkAlt2, enemy.AtkAlt2);
                 ChkSpecialEncounter.Checked = enemy.SpecialEncounter;
-                NumRound.Enabled = !enemy.SpecialEncounter;
                 ChkFriend.Checked = enemy.Friend;
+                SelectCurrency(enemy.Currency ?? "");
+                NumCost.Value = Math.Max(NumCost.Minimum, Math.Min(enemy.CurrencyCost, NumCost.Maximum));
+                NumReward.Value = Math.Max(NumReward.Minimum, Math.Min(enemy.CurrencyReward, NumReward.Maximum));
+                NumCost.Enabled = NumRound.Value == 1;
+                SelectPack(enemy.PrizeCardPack ?? "");
+                NumPrizeChance.Value = Math.Max(NumPrizeChance.Minimum, Math.Min(enemy.PrizeChance ?? 100, NumPrizeChance.Maximum));
+                TxtAttackPattern.Text = enemy.AttackPattern != null ? string.Join(",", enemy.AttackPattern) : "";
+            }
+
+            /// <summary>Selects the pack *id*, keeping one cards.json no
+            /// longer has so that saving does not silently drop it.</summary>
+            private void SelectPack(string id)
+            {
+                var item = CmbPrizePack.Items.OfType<PackItem>().FirstOrDefault(p => p.Id == id);
+                if (item == null)
+                {
+                    item = new PackItem { Id = id, Name = $"(missing pack: {id})" };
+                    CmbPrizePack.Items.Add(item);
+                }
+                CmbPrizePack.SelectedItem = item;
+            }
+
+            /// <summary>Fills the Prize Pack list from the module's cards.json.</summary>
+            public void LoadCardPacks(string modulePath)
+            {
+                CmbPrizePack.Items.Clear();
+                CmbPrizePack.Items.Add(new PackItem { Id = "", Name = "" });
+                foreach (var pack in CollectionFile.Load(modulePath).Packs)
+                    if (!string.IsNullOrWhiteSpace(pack.Id))
+                        CmbPrizePack.Items.Add(new PackItem { Id = pack.Id, Name = pack.Name ?? pack.Id });
+                CmbPrizePack.SelectedIndex = 0;
+            }
+
+            /// <summary>Selects *name*, keeping one no currency declares any
+            /// more so that saving does not silently drop it.</summary>
+            private void SelectCurrency(string name)
+            {
+                if (!CmbCurrency.Items.Contains(name))
+                    CmbCurrency.Items.Add(name);
+                CmbCurrency.SelectedItem = name;
+            }
+
+            /// <summary>Refills the currency list, keeping what is selected.</summary>
+            public void LoadCurrencies(IEnumerable<string> names)
+            {
+                string selected = CmbCurrency.SelectedItem as string ?? "";
+                CmbCurrency.Items.Clear();
+                CmbCurrency.Items.Add("");
+                foreach (var name in names ?? Enumerable.Empty<string>())
+                    if (!string.IsNullOrWhiteSpace(name) && !CmbCurrency.Items.Contains(name))
+                        CmbCurrency.Items.Add(name);
+                SelectCurrency(selected);
             }
 
             public void SaveToEnemy(BattleEnemy enemy)
@@ -991,20 +1162,43 @@ namespace OmnipetModuleEditor.Tabs
                 enemy.Name = TxtName.Text;
                 enemy.Power = (int)NumPower.Value;
                 enemy.Stage = CmbStage.SelectedIndex;
-                enemy.Attribute = CmbAttribute.SelectedIndex >= 0 ? PetUtils.AttributeEnumToJson((AttributeEnum)CmbAttribute.SelectedIndex) : "";
+                // Written only when changed: Free shows for an empty, absent or
+                // unknown attribute, and those stay as they are.
+                var attribute = CmbAttribute.SelectedIndex >= 0
+                    ? (AttributeEnum)CmbAttribute.SelectedIndex : AttributeEnum.FREE;
+                if (attribute != PetUtils.JsonToAttributeEnum(enemy.Attribute ?? ""))
+                    enemy.Attribute = PetUtils.AttributeEnumToJson(attribute);
                 enemy.Hp = (int)NumHp.Value;
                 enemy.Area = (int)NumArea.Value;
                 enemy.Round = (int)NumRound.Value;
                 enemy.Version = (int)NumVersion.Value;
                 enemy.Handicap = (int)NumHandicap.Value;
-                enemy.Prize = CmbPrize.SelectedItem?.ToString() ?? "";
-                enemy.Unlock = TxtUnlock.Text;
+                // An empty prize or unlock the record does not have stays out.
+                string prize = CmbPrize.SelectedItem?.ToString() ?? "";
+                enemy.Prize = prize == "" && enemy.Prize == null ? null : prize;
+                string unlock = TxtUnlock.Text;
+                enemy.Unlock = unlock == "" && enemy.Unlock == null ? null : unlock;
                 enemy.AtkMain = (CmbAtkMain.SelectedItem as AtkComboItem)?.Number ?? 0;
                 enemy.AtkAlt = (CmbAtkAlt.SelectedItem as AtkComboItem)?.Number ?? 0;
                 enemy.AtkAlt2 = (CmbAtkAlt2.SelectedItem as AtkComboItem)?.Number ?? 0;
                 enemy.SpecialEncounter = ChkSpecialEncounter.Checked;
-                if (enemy.SpecialEncounter) enemy.Round = 1;
                 enemy.Friend = ChkFriend.Checked;
+                string currency = CmbCurrency.SelectedItem as string ?? "";
+                enemy.Currency = currency == "" ? null : currency;
+                enemy.CurrencyReward = (int)NumReward.Value;
+                enemy.CurrencyCost = enemy.Round == 1 ? (int)NumCost.Value : 0;
+                string pack = (CmbPrizePack.SelectedItem as PackItem)?.Id ?? "";
+                enemy.PrizeCardPack = pack == "" ? null : pack;
+                // 100% is the default and stays out of battle.json (unless the
+                // record already names it).
+                enemy.PrizeChance = NumPrizeChance.Value == 100
+                    ? (enemy.PrizeChance == 100 ? (int?)100 : null)
+                    : (int)NumPrizeChance.Value;
+                var shots = new List<int>();
+                foreach (var part in TxtAttackPattern.Text.Split(new[] { ',', ' ' }, StringSplitOptions.RemoveEmptyEntries))
+                    if (int.TryParse(part.Trim(), out int shot) && shot > 0)
+                        shots.Add(shot);
+                enemy.AttackPattern = shots.Count > 0 ? shots.ToArray() : null;
             }
 
             public void LoadAtkSprites(string modulePath, string primaryFormat = null)

@@ -34,7 +34,7 @@ A comprehensive module editor for the Omnipet virtual pet platform, allowing cre
 ### Training & Battle
 - **Training System**: Effort gain, strength multipliers, weight changes
 - **Battle Configuration**: Sick chances, attribute advantages, global hit points
-- **Battle Protocols**: Support for various Digimon device protocols (DM20, PEN20, DMX, PENZ, DMC, DM)
+- **Battle Protocols**: Support for various Digimon device protocols (DMOG, PENOG, DM20, PEN20, DMX, PENZ, DMC, PENC)
 - **Sequential Rounds**: Optional sequential battle round system
 
 ### Death & Vital Systems

@@ -38,9 +38,12 @@ namespace OmnipetModuleEditor.docgenerators
                 if (!string.IsNullOrEmpty(card.Sprites?.Front))
                     sb.AppendLine($"  <img src=\"../{Enc(card.Sprites.Front)}\" alt=\"{Enc(card.Name)}\" onerror=\"this.style.display='none'\">");
                 string title = card.Type == CollectionCard.TypeSoulPlate
-                    ? Enc(card.Name) : $"{Enc(card.Name)} #{card.Number}";
+                    ? Enc(card.Name) : $"{Enc(card.Name)} #{Enc(card.DisplayNumber)}";
                 sb.AppendLine($"  <div class=\"card-title\">{title}</div>");
-                string series = string.IsNullOrEmpty(card.Series) ? "" : $" · Series {Enc(card.Series)}";
+                string seriesLabel = !string.IsNullOrEmpty(card.Series) && card.Series.StartsWith("Promo ")
+                    ? Enc(card.Series)
+                    : $"Series {Enc(card.Series)}";
+                string series = string.IsNullOrEmpty(card.Series) ? "" : $" · {seriesLabel}";
                 sb.AppendLine($"  <div class=\"card-sub\">{Enc(card.Type)}{series}</div>");
                 sb.AppendLine($"  <div class=\"card-sub rarity-{Enc(card.Rarity)}\">{Enc(card.Rarity)}</div>");
                 sb.AppendLine($"  <div class=\"card-value\">{Enc(card.RfidValue)}</div>");
@@ -53,12 +56,15 @@ namespace OmnipetModuleEditor.docgenerators
         {
             var sb = new StringBuilder();
             foreach (var group in collection.Effects
-                .OrderBy(g => (g.Value ?? "").Length).ThenBy(g => g.Value))
+                .OrderBy(g => g.Tool ?? CardEffectGroup.ToolAny)
+                .ThenBy(g => (g.Value ?? "").Length).ThenBy(g => g.Value)
+                .ThenBy(g => g.Lr ?? "Any"))
             {
                 string effects = group.Effects != null && group.Effects.Count > 0
                     ? string.Join("<br>", group.Effects.Select(fx => Enc(fx.DisplayLabel)))
                     : "<i>none</i>";
                 sb.AppendLine("<tr>");
+                sb.AppendLine($"  <td>{Enc(group.Tool ?? CardEffectGroup.ToolAny)}</td>");
                 sb.AppendLine($"  <td class=\"mono\">{Enc(group.Value)}</td>");
                 sb.AppendLine($"  <td>{Enc(group.Lr ?? "Any")}</td>");
                 sb.AppendLine($"  <td>{effects}</td>");

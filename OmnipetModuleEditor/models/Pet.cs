@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Text.Json.Serialization;
 
 namespace OmnipetModuleEditor.Models
@@ -68,14 +68,68 @@ namespace OmnipetModuleEditor.Models
         [JsonPropertyName("power")]
         public int Power { get; set; }
 
+        /// <summary>
+        /// The shake rate this Digimon's charge asks for, in the Digivice
+        /// iC's own RPM. Per Digimon rather than per stage: the iC roster
+        /// gives every form a figure between 50 and 85, and hitting it is
+        /// what throws the Hyper x5 attack row.
+        ///
+        /// 0 means the module names none, and the RPM minigame falls back to
+        /// the playbook's stage/attribute table - which is what a pet from
+        /// any other module on that wire reads. Only the RPM charge consumes
+        /// it; leave it 0 everywhere else.
+        /// </summary>
+        [JsonPropertyName("rpm")]
+        public int Rpm { get; set; }
+
         [JsonPropertyName("attribute")]
         public string Attribute { get; set; }
+
+        /// <summary>
+        /// Native DigiSoul family used by Digivice iC devices. An empty value
+        /// means the device/profile does not assign a DigiSoul family.
+        /// </summary>
+        [JsonPropertyName("digisoul")]
+        public string Digisoul { get; set; } = "";
+
+        /// <summary>Base probability, from 0 through 100 percent, that this
+        /// Digimon is injured after a battle loss.</summary>
+        [JsonPropertyName("injury_probability")]
+        public int InjuryProbability { get; set; }
+
+        /// <summary>The Godzilla devices' scheduled encounters: the group of
+        /// the events.json schedule whose times this Digimon's encounters
+        /// come at. Null, and left out of the file, for none.</summary>
+        [JsonPropertyName("encounter_time_group")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public int? EncounterTimeGroup { get; set; }
+
+        /// <summary>Which pool of a scheduled encounter event this Digimon
+        /// meets its opponents from (the event's Pool Field names this
+        /// field). Null, and left out of the file, for none.</summary>
+        [JsonPropertyName("encounter_opponent_group")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public int? EncounterOpponentGroup { get; set; }
+
+        /// <summary>The Vital Bracelet's random battle (a CardBattle event):
+        /// this character's chance in percent of being met by a pet of its
+        /// version at stage 1-4, 5-7 and 8 (the card's three battle pools).
+        /// A null entry is none; null, and left out of the file, for a
+        /// Digimon not on a card.</summary>
+        [JsonPropertyName("encounter_chances")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public int?[] EncounterChances { get; set; }
 
         [JsonPropertyName("condition_hearts")]
         public int ConditionHearts { get; set; }
 
+        [JsonPropertyName("jogress_available")]
+        public bool JogressAvailable { get; set; }
+
+        // Legacy misspelled key. Set-only, so an older module still loads
+        // and saving it writes only the corrected name.
         [JsonPropertyName("jogress_avaliable")]
-        public bool JogressAvaliable { get; set; }
+        public bool JogressAvaliable { set { JogressAvailable = value; } }
 
         [JsonPropertyName("hp")]
         public int Hp { get; set; }
@@ -85,6 +139,11 @@ namespace OmnipetModuleEditor.Models
         /// Lazy 5. Devices with no personality data use Normal.</summary>
         [JsonPropertyName("personality")]
         public string Personality { get; set; } = "Normal";
+
+        /// <summary>Labels an evolution can count defeats of (its
+        /// <c>defeat_tag</c>), such as the PENGZ's "G-Monster". Null: none.</summary>
+        [JsonPropertyName("tags")]
+        public string[] Tags { get; set; }
 
         [JsonPropertyName("star")]
         public int Star { get; set; }
@@ -106,8 +165,27 @@ namespace OmnipetModuleEditor.Models
         /// "Normal" (null — not saved), "Unobtainable" (never appears in the
         /// digidex) or "Friend" (digidex "Friends" list; used by Xros).
         /// </summary>
+        [JsonPropertyName("availability")]
+        public string Availability { get; set; }
+
+        // Legacy misspelled key. Set-only, so an older module still loads
+        // and saving it writes only the corrected name.
         [JsonPropertyName("avaliability")]
-        public string Avaliability { get; set; }
+        public string Avaliability { set { Availability = value; } }
+    }
+
+    /// <summary>The Evolution Stage names shown for stage numbers 0-8 (the
+    /// project's terms; StageEnum keeps the old dub names for code).</summary>
+    public static class Stages
+    {
+        public static readonly string[] Names =
+        {
+            "Egg", "Baby I", "Baby II", "Child", "Adult",
+            "Perfect", "Ultimate", "Super Ultimate", "Super Ultimate+"
+        };
+
+        public static string Name(int stage) =>
+            stage >= 0 && stage < Names.Length ? Names[stage] : "Stage " + stage;
     }
 
     public enum StageEnum

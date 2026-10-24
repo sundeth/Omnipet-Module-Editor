@@ -31,7 +31,7 @@ namespace OmnipetModuleEditor.Models
                 Power = 0,
                 Attribute = "",
                 ConditionHearts = 0,
-                JogressAvaliable = false,
+                JogressAvailable = false,
                 Hp = 0,
                 Evolve = new List<Evolution>()
             },
@@ -60,7 +60,7 @@ namespace OmnipetModuleEditor.Models
                 Power = 0,
                 Attribute = "",
                 ConditionHearts = 1,
-                JogressAvaliable = false,
+                JogressAvailable = false,
                 Hp = 0,
                 Evolve = new List<Evolution>()
             },
@@ -89,7 +89,7 @@ namespace OmnipetModuleEditor.Models
                 Power = 0,
                 Attribute = "",
                 ConditionHearts = 2,
-                JogressAvaliable = false,
+                JogressAvailable = false,
                 Hp = 0,
                 Evolve = new List<Evolution>()
             },
@@ -118,7 +118,7 @@ namespace OmnipetModuleEditor.Models
                 Power = 10,
                 Attribute = "",
                 ConditionHearts = 3,
-                JogressAvaliable = false,
+                JogressAvailable = false,
                 Hp = 10,
                 Evolve = new List<Evolution>()
             },
@@ -147,7 +147,7 @@ namespace OmnipetModuleEditor.Models
                 Power = 50,
                 Attribute = "",
                 ConditionHearts = 4,
-                JogressAvaliable = false,
+                JogressAvailable = false,
                 Hp = 12,
                 Evolve = new List<Evolution>()
             },
@@ -176,7 +176,7 @@ namespace OmnipetModuleEditor.Models
                 Power = 100,
                 Attribute = "",
                 ConditionHearts = 4,
-                JogressAvaliable = true,
+                JogressAvailable = true,
                 Hp = 15,
                 Evolve = new List<Evolution>()
             },
@@ -205,7 +205,7 @@ namespace OmnipetModuleEditor.Models
                 Power = 150,
                 Attribute = "",
                 ConditionHearts = 4,
-                JogressAvaliable = false,
+                JogressAvailable = false,
                 Hp = 18,
                 Evolve = new List<Evolution>()
             },
@@ -234,7 +234,7 @@ namespace OmnipetModuleEditor.Models
                 Power = 200,
                 Attribute = "",
                 ConditionHearts = 4,
-                JogressAvaliable = false,
+                JogressAvailable = false,
                 Hp = 20,
                 Evolve = new List<Evolution>()
             },
@@ -263,7 +263,7 @@ namespace OmnipetModuleEditor.Models
                 Power = 200,
                 Attribute = "",
                 ConditionHearts = 4,
-                JogressAvaliable = false,
+                JogressAvailable = false,
                 Hp = 20,
                 Evolve = new List<Evolution>()
             }

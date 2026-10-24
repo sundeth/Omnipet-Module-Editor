@@ -225,6 +225,21 @@ namespace OmnipetModuleEditor
             itemTab.Controls.Add(itemControl);
             tabControlMain.TabPages.Add(itemTab);
 
+            // Shops sell the Items tab's items and wait on the Module tab's
+            // unlocks, so they read both live rather than from disk; the
+            // Battle tab's enemies charge and pay in its currencies.
+            var shopControl = new ShopTab();
+            shopControl.Dock = DockStyle.Fill;
+            shopControl.ItemNamesProvider = itemControl.ItemNames;
+            shopControl.UnlockNamesProvider = moduleTabControl.UnlockNames;
+            shopControl.SetModule(currentPath, currentModule);
+            battleTabControl.CurrencyNamesProvider = shopControl.CurrencyNames;
+            itemControl.CurrencyNamesProvider = shopControl.CurrencyNames;
+
+            var shopTab = new TabPage("Shop/Currencies");
+            shopTab.Controls.Add(shopControl);
+            tabControlMain.TabPages.Add(shopTab);
+
             collectionTabControl = new CollectionTab();
             collectionTabControl.Dock = DockStyle.Fill;
             collectionTabControl.SetModule(currentPath, currentModule);

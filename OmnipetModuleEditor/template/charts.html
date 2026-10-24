@@ -373,9 +373,9 @@
             }
             
             // Add all pet information with tooltips
-            addRow('Stage', getStageDisplayName(pet.stage), 'Evolution stage: 0=Egg, 1=Baby, 2=Baby II, 3=Child, 4=Adult, 5=Perfect, 6=Ultimate, 7=Super, 8=Super+');
+            addRow('Stage', getStageDisplayName(pet.stage), 'Evolution stage: 0=Egg, 1=Baby I, 2=Baby II, 3=Child, 4=Adult, 5=Perfect, 6=Ultimate, 7=Super Ultimate, 8=Super Ultimate+');
             addRow('Version', pet.version, 'Version roster this pet belongs to. Different versions may have different evolution paths and requirements.');
-            addRow('Attribute', pet.attribute || 'Free', 'Type advantage in battle: Data > Virus > Vaccine > Data. Free has no advantage/disadvantage.');
+            addRow('Attribute', pet.attribute || 'Free', 'Attribute advantage in battle: Vaccine > Virus > Data > Vaccine. Free has no advantage/disadvantage.');
             addRow('Special', pet.special ? 'Yes' : 'No', 'Special pets often have unique evolution requirements or unlock conditions.');
             if (pet.special && pet.specialKey) addRow('Special Key', pet.specialKey, 'Unique identifier for special evolution or unlock conditions.');
             addRow('Power', pet.power, 'Base battle power. Higher power increases damage output and battle effectiveness.');
@@ -384,7 +384,7 @@
             addAttackRow('ATK Alt', pet.atkAlt, 'Alternative attack animation ID. Used for secondary attacks or special moves.');
             addRow('Time', pet.time + ' hours', 'Evolution timer in hours. Pet evolves when this time expires (if evolution requirements are met).');
             addRow('Energy', pet.energy, 'Maximum DP (energy) capacity. DP is consumed during battles and training.');
-            addRow('Min Weight', pet.minWeight, 'Minimum weight threshold. Weight can cause sickness when reaches 99g. Can be lost through training, but never below the minimun.');
+            addRow('Min Weight', pet.minWeight, 'Minimum weight threshold. Weight can cause sickness when reaches 99g. Can be lost through training, but never below the minimum.');
             if (pet.evolWeight > pet.minWeight) addRow('Evol Weight', pet.evolWeight, 'Evolution weight. Determines the starting weight of a pet after evolution.');
             addRow('Stomach', pet.stomach, 'Hunger capacity. Determines how much food the pet can eat before becoming full.');
             addRow('Hunger Loss', pet.hungerLoss + ' minutes', 'Rate of hunger depletion over time. Hunger will decrease in 1.');
@@ -421,14 +421,14 @@
         function getStageDisplayName(stage) {
             switch(stage) {
                 case 0: return 'Egg';
-                case 1: return 'Baby';
+                case 1: return 'Baby I';
                 case 2: return 'Baby II';
                 case 3: return 'Child';
                 case 4: return 'Adult';
                 case 5: return 'Perfect';
                 case 6: return 'Ultimate';
-                case 7: return 'Super';
-                case 8: return 'Super+';
+                case 7: return 'Super Ultimate';
+                case 8: return 'Super Ultimate+';
                 default: return 'Stage ' + stage;
             }
         }

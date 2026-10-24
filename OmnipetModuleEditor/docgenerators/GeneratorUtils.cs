@@ -384,14 +384,17 @@ namespace OmnipetModuleEditor.docgenerators
                     }
                     
                     // Add all pet information with tooltips
-                    addRow('Stage', getStageDisplayName(pet.stage), 'Evolution stage: 0=Egg, 1=Baby, 2=Baby II, 3=Child, 4=Adult, 5=Perfect, 6=Ultimate, 7=Super, 8=Super+');
+                    addRow('Stage', getStageDisplayName(pet.stage), 'Evolution stage: 0=Egg, 1=Baby I, 2=Baby II, 3=Child, 4=Adult, 5=Perfect, 6=Ultimate, 7=Super Ultimate, 8=Super Ultimate+');
                     addRow('Version', pet.version, 'Version roster this pet belongs to. Different versions may have different evolution paths and requirements.');
-                    addRow('Attribute', pet.attribute || 'Free', 'Type advantage in battle: Data > Virus > Vaccine > Data. Free has no advantage/disadvantage.');
+                    addRow('Attribute', pet.attribute || 'Free', 'Attribute advantage in battle: Vaccine > Virus > Data > Vaccine. Free has no advantage/disadvantage.');
+                    addRow('DigiSoul', pet.digisoul, 'Native DigiSoul family used by Digivice iC devices.');
                 addRow('Personality', pet.personality || 'Normal', 'Which battle round the special move fires on, earning +2 AP that round: Stoic 1, Active 2, Normal 3, Indoor 4, Lazy 5.');
+                    if (pet.tags && pet.tags.length) addRow('Tags', pet.tags.join(', '), 'Labels an evolution can count defeats of (Defeat Tag), such as the PENGZ G-Monsters.');
                     addRow('Special', pet.special ? 'Yes' : 'No', 'Special pets often have unique evolution requirements or unlock conditions.');
                     if (pet.special && pet.specialKey) addRow('Special Key', pet.specialKey, 'Unique identifier for special evolution or unlock conditions.');
                     addRow('Power', pet.power, 'Base battle power. Higher power increases damage output and battle effectiveness.');
                     addRow('HP', pet.hp, 'Health Points. Higher HP allows the pet to survive more damage in battles.');
+                    if (pet.injuryProbability) addRow('Injury Probability', pet.injuryProbability + '%', 'Base chance that this Digimon is injured after losing a battle.');
                     addAttackRow('ATK Main', pet.atkMain, 'Primary attack animation ID. Used for main battle attacks and training.');
                     addAttackRow('ATK Alt', pet.atkAlt, 'Alternative attack animation ID. Used for secondary attacks or special moves.');
                     addRow('Time', pet.time + ' hours', 'Evolution timer in hours. Pet evolves when this time expires (if evolution requirements are met).');
@@ -409,6 +412,14 @@ namespace OmnipetModuleEditor.docgenerators
                     if (pet.conditionHearts !== undefined) addRow('Condition Hearts', pet.conditionHearts, 'Condition/health hearts. Represents overall care quality and affects evolution.');
                     if (pet.healDoses !== undefined) addRow('Heal Doses', pet.healDoses, 'Number of medicine doses needed to cure sickness.');
                     if (pet.jogressAvailable !== undefined) addRow('Jogress Available', pet.jogressAvailable ? 'Yes' : 'No', 'Can participate in Jogress (fusion) evolution with another compatible pet.');
+                    if (pet.availability && pet.availability !== 'Normal') addRow('Availability', pet.availability, 'Normal pets can be raised; Unobtainable ones appear only as enemies or partners.');
+                    if (pet.atkAlt2) addRow('Second Alternate Attack', pet.atkAlt2, 'The attack sprite of the stronger shot on protocols that have three (the Digital Monster X).');
+                    if (pet.rpm) addRow('RPM', pet.rpm, 'The pace the Digivice iC charge (RPM) asks for.');
+                    if (pet.criticalTurn) addRow('Critical Turn', pet.criticalTurn, 'The battle round this Digimon fires its critical attack on.');
+                    if (pet.encounterTimeGroup != null) addRow('Encounter Time Group', pet.encounterTimeGroup, 'The schedule of random encounters this form uses.');
+                    if (pet.encounterOpponentGroup != null) addRow('Encounter Opponent Group', pet.encounterOpponentGroup, 'The pool random-encounter opponents come from.');
+                    if (pet.encounterChances && pet.encounterChances.length) addRow('Encounter Chances', pet.encounterChances.map(v => v == null ? '-' : v + '%').join(', '), 'Chance of a random encounter at each of its times.');
+                    if (pet.temporaryEvolutions && pet.temporaryEvolutions.length) addRow('Temporary Evolutions', pet.temporaryEvolutions.map(t => t.to + (t.type ? ' [' + t.type + ']' : '') + (t.megahit ? ' (Megahit)' : '') + (t.friendCount ? ' (friends ' + t.friendCount.join('-') + ')' : '') + (t.battleArea ? ' (area ' + t.battleArea.join('-') + ')' : '') + (t.xrosCost ? ' (' + t.xrosCost + ' DP)' : '')).join(', '), 'Battle-only forms (DigiXros, Burst, mode changes) and what triggers them.');
                     
                     body.innerHTML = bodyHtml;
                     document.getElementById('pet-modal').style.display = 'flex';
@@ -434,14 +445,14 @@ namespace OmnipetModuleEditor.docgenerators
                 function getStageDisplayName(stage) {
                     switch(stage) {
                         case 0: return 'Egg';
-                        case 1: return 'Baby';
+                        case 1: return 'Baby I';
                         case 2: return 'Baby II';
                         case 3: return 'Child';
                         case 4: return 'Adult';
                         case 5: return 'Perfect';
                         case 6: return 'Ultimate';
-                        case 7: return 'Super';
-                        case 8: return 'Super+';
+                        case 7: return 'Super Ultimate';
+                        case 8: return 'Super Ultimate+';
                         default: return 'Stage ' + stage;
                     }
                 }
@@ -880,6 +891,10 @@ namespace OmnipetModuleEditor.docgenerators
                     <th>Status</th>
                     <th>Amount</th>
                     <th>Weight Gain</th>
+                    <th>Protocol Value</th>
+                    <th>Attack Sprite</th>
+                    <th>DigiSoul</th>
+                    <th>Extra Effects</th>
                 </tr>
             </thead>
             <tbody>
@@ -913,21 +928,7 @@ namespace OmnipetModuleEditor.docgenerators
         }
 
         public static string GetStageDisplayName(int stage)
-        {
-            switch (stage)
-            {
-                case 0: return "Egg";
-                case 1: return "Baby";
-                case 2: return "Baby II";
-                case 3: return "Child";
-                case 4: return "Adult";
-                case 5: return "Perfect";
-                case 6: return "Ultimate";
-                case 7: return "Super";
-                case 8: return "Super+";
-                default: return $"Stage {stage}";
-            }
-        }
+            => OmnipetModuleEditor.Models.Stages.Name(stage);
 
         public static string GetPetSprite(string petName, OmnipetModuleEditor.Models.Module module)
         {

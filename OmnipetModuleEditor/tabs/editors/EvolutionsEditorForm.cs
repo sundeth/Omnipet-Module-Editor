@@ -1,4 +1,4 @@
-﻿using OmnipetModuleEditor.Controls;
+using OmnipetModuleEditor.Controls;
 using OmnipetModuleEditor.Models;
 using OmnipetModuleEditor.Properties;
 using OmnipetModuleEditor.Utils;
@@ -53,6 +53,38 @@ namespace OmnipetModuleEditor
 
         private List<Connection> connections = new List<Connection>();
         private List<Item> items;
+
+        // Save keeps what the canvas never showed and the order routes had:
+        // routes are first-match-wins, so their order is data.
+        //  - originalIndex: each stored route's place in its pet's list when
+        //    the editor opened;
+        //  - drawnRoutes: stored routes the canvas drew a connection for (a
+        //    route whose target is on another version, or missing, never is,
+        //    and is saved back untouched);
+        //  - reorderedPets: pets whose order the Evolution Order window set.
+        private readonly Dictionary<object, int> originalIndex = new Dictionary<object, int>(RefEq.Instance);
+        private readonly HashSet<object> drawnRoutes = new HashSet<object>(RefEq.Instance);
+        private readonly HashSet<Pet> reorderedPets = new HashSet<Pet>();
+
+        private sealed class RefEq : IEqualityComparer<object>
+        {
+            public static readonly RefEq Instance = new RefEq();
+            public new bool Equals(object a, object b) => ReferenceEquals(a, b);
+            public int GetHashCode(object o) => System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(o);
+        }
+
+        private void SnapshotRouteOrder()
+        {
+            foreach (var pet in pets ?? new List<Pet>())
+            {
+                var evolve = pet.Evolve ?? new List<Evolution>();
+                for (int i = 0; i < evolve.Count; i++)
+                    if (evolve[i] != null && !originalIndex.ContainsKey(evolve[i])) originalIndex[evolve[i]] = i;
+                var temp = pet.TempEvolve ?? new List<TempEvolution>();
+                for (int i = 0; i < temp.Count; i++)
+                    if (temp[i] != null && !originalIndex.ContainsKey(temp[i])) originalIndex[temp[i]] = i;
+            }
+        }
         private static readonly Random rand = new Random();
         private PetListPanel petListPanel;
 
@@ -64,6 +96,7 @@ namespace OmnipetModuleEditor
             this.pets = pets;
             this.modulePath = modulePath;
             this.module = module;
+            SnapshotRouteOrder();
             InitializeLayout();
             LoadDigimonsForSelectedVersion();
             LoadItemsFromJson();
@@ -797,6 +830,7 @@ namespace OmnipetModuleEditor
                     if (entry.Key is Connection c)
                         connections.Add(c);
                 }
+                reorderedPets.Add(pet);
             }
         }
 
@@ -886,11 +920,12 @@ namespace OmnipetModuleEditor
         /// </summary>
         private Panel CreateCriteriaPanel(Evolution evo)
         {
+            drawnRoutes.Add(evo);
             var panel = EvolutionBoxRenderer.CreatePanel(evo);
 
             EventHandler clickHandler = (s, e) =>
             {
-                using (var form = new EvolutionCriteriaForm(evo, this.items))
+                using (var form = new EvolutionCriteriaForm(evo, this.items, this.pets, module?.Unlocks))
                 {
                     if (form.ShowDialog(this) == DialogResult.OK)
                         ReplaceCriteriaPanel(panel, CreateCriteriaPanel(evo));
@@ -906,6 +941,7 @@ namespace OmnipetModuleEditor
         /// </summary>
         private Panel CreateTempCriteriaPanel(TempEvolution evo)
         {
+            drawnRoutes.Add(evo);
             var panel = EvolutionBoxRenderer.CreatePanel(evo);
 
             EventHandler clickHandler = (s, e) =>
@@ -1418,94 +1454,85 @@ namespace OmnipetModuleEditor
             var petsInCanvas = panelChart.Controls.OfType<Panel>()
                 .Where(p => p.Tag is Pet pet && pet.Version == selectedVersion)
                 .Select(p => (Pet)p.Tag)
+                .Distinct()
                 .ToList();
 
             foreach (var pet in petsInCanvas)
             {
-                pet.Evolve = new List<Evolution>();
-                pet.TempEvolve = null; // rebuilt below; stays null when empty
-            }
-
-            foreach (var conn in connections)
-            {
-                if (!(conn.From.Tag is Pet fromPet) || !(conn.To.Tag is Pet toPet))
-                    continue;
-                if (fromPet.Version != selectedVersion || toPet.Version != selectedVersion)
-                    continue;
-
-                if (conn.IsTemp)
+                // This pet's connections, in canvas order; a route drawn
+                // twice (the pet dropped twice) is written once.
+                var normal = new List<KeyValuePair<object, Evolution>>();
+                var temp = new List<KeyValuePair<object, TempEvolution>>();
+                var seen = new HashSet<object>(RefEq.Instance);
+                foreach (var conn in connections)
                 {
-                    var tempEvo = conn.CriteriaPanel?.Tag as TempEvolution
-                                  ?? new TempEvolution();
-                    var clone = tempEvo.Clone();
-                    clone.To = toPet.Name;
-                    if (fromPet.TempEvolve == null)
-                        fromPet.TempEvolve = new List<TempEvolution>();
-                    fromPet.TempEvolve.Add(clone);
-                    continue;
+                    if (!(conn.From.Tag is Pet fromPet) || fromPet != pet || !(conn.To.Tag is Pet toPet))
+                        continue;
+                    if (toPet.Version != selectedVersion)
+                        continue;
+                    object key = conn.CriteriaPanel?.Tag;
+                    if (key != null && !seen.Add(key))
+                        continue;
+
+                    if (conn.IsTemp)
+                    {
+                        var clone = (key as TempEvolution ?? new TempEvolution()).Clone();
+                        clone.To = toPet.Name;
+                        temp.Add(new KeyValuePair<object, TempEvolution>(key, clone));
+                    }
+                    else
+                    {
+                        var evoClone = CloneEvolution(key as Evolution ?? new Evolution { To = toPet.Name });
+                        evoClone.To = toPet.Name;
+                        normal.Add(new KeyValuePair<object, Evolution>(key, evoClone));
+                    }
                 }
 
-                Evolution evo = null;
-                if (conn.CriteriaPanel != null && conn.CriteriaPanel.Tag is Evolution taggedEvo)
-                {
-                    evo = taggedEvo;
-                }
-                else
-                {
-                    evo = fromPet.Evolve?.FirstOrDefault(e => e.To == toPet.Name);
-                }
-
-                if (evo == null)
-                    evo = new Evolution { To = toPet.Name };
-
-                var evoClone = CloneEvolution(evo);
-                evoClone.To = toPet.Name;
-                fromPet.Evolve.Add(evoClone);
+                bool reordered = reorderedPets.Contains(pet);
+                pet.Evolve = MergeRoutes(normal, pet.Evolve, reordered);
+                var tempEvolve = MergeRoutes(temp, pet.TempEvolve, reordered);
+                pet.TempEvolve = tempEvolve.Count > 0 ? tempEvolve : null; // stays null when empty
             }
         }
 
         /// <summary>
-        /// Utility function to copy all fields of Evolution.
+        /// A pet's routes after Save: the ones drawn on the canvas, plus the
+        /// stored ones it never drew (a target on another version or not in
+        /// the module), which are kept as they are. Without the Evolution
+        /// Order window every route keeps the place it had and a new one goes
+        /// last, so dropping a pet onto the canvas reorders nothing; after it,
+        /// the window's order is kept and the undrawn routes go back to their
+        /// old places.
+        /// </summary>
+        private List<T> MergeRoutes<T>(List<KeyValuePair<object, T>> drawn, List<T> stored, bool reordered) where T : class
+        {
+            var hidden = (stored ?? new List<T>()).Where(r => r != null && !drawnRoutes.Contains(r)).ToList();
+            int Index(object key) => key != null && originalIndex.TryGetValue(key, out int i) ? i : int.MaxValue;
+
+            if (reordered)
+            {
+                var result = drawn.Select(d => d.Value).ToList();
+                foreach (var h in hidden.OrderBy(h => Index(h)))
+                    result.Insert(Math.Min(Index(h), result.Count), h);
+                return result;
+            }
+            // OrderBy is stable: new routes keep their canvas order, last.
+            return drawn.Select(d => new { Idx = Index(d.Key), Route = d.Value })
+                .Concat(hidden.Select(h => new { Idx = Index(h), Route = h }))
+                .OrderBy(x => x.Idx)
+                .Select(x => x.Route)
+                .ToList();
+        }
+
+        /// <summary>
+        /// A deep copy of every field of an Evolution, through the model's
+        /// own JSON (the field-by-field copy below dropped every field it was
+        /// not taught, such as gcell_level and stage-9).
         /// </summary>
         private Evolution CloneEvolution(Evolution evo)
         {
-            return new Evolution
-            {
-                To = evo.To,
-                ConditionHearts = evo.ConditionHearts != null ? (int[])evo.ConditionHearts.Clone() : null,
-                Training = evo.Training != null ? (int[])evo.Training.Clone() : null,
-                Battles = evo.Battles != null ? (int[])evo.Battles.Clone() : null,
-                WinRatio = evo.WinRatio != null ? (int[])evo.WinRatio.Clone() : null,
-                WinCount = evo.WinCount != null ? (int[])evo.WinCount.Clone() : null, // New field
-                Mistakes = evo.Mistakes != null ? (int[])evo.Mistakes.Clone() : null,
-                Level = evo.Level != null ? (int[])evo.Level.Clone() : null,
-                Overfeed = evo.Overfeed != null ? (int[])evo.Overfeed.Clone() : null,
-                SleepDisturbances = evo.SleepDisturbances != null ? (int[])evo.SleepDisturbances.Clone() : null,
-                Area = evo.Area,
-                Stage = evo.Stage,
-                Version = evo.Version,
-                Attribute = evo.Attribute,
-                Jogress = evo.Jogress,
-                JogressPrefix = evo.JogressPrefix, // <-- Adicionado
-                SpecialEncounter = evo.SpecialEncounter,
-                Stage5 = evo.Stage5 != null ? (int[])evo.Stage5.Clone() : null,
-                Stage6 = evo.Stage6 != null ? (int[])evo.Stage6.Clone() : null, // New field
-                Stage7 = evo.Stage7 != null ? (int[])evo.Stage7.Clone() : null, // New field
-                Stage8 = evo.Stage8 != null ? (int[])evo.Stage8.Clone() : null, // New field
-                Item = evo.Item,
-                TimeRange = evo.TimeRange != null ? (string[])evo.TimeRange.Clone() : null, // <-- Adicionado
-                Trophies = evo.Trophies != null ? (int[])evo.Trophies.Clone() : null, // New field
-                VitalValues = evo.VitalValues != null ? (int[])evo.VitalValues.Clone() : null, // New field
-                Weigth = evo.Weigth != null ? (int[])evo.Weigth.Clone() : null, // New field
-                QuestsCompleted = evo.QuestsCompleted != null ? (int[])evo.QuestsCompleted.Clone() : null, // New field
-                Pvp = evo.Pvp != null ? (int[])evo.Pvp.Clone() : null, // New field
-
-                // G-Cell evolution criteria
-                GCellHatch = evo.GCellHatch,
-                BlueGCells = evo.BlueGCells != null ? (int[])evo.BlueGCells.Clone() : null,
-                YellowGCells = evo.YellowGCells != null ? (int[])evo.YellowGCells.Clone() : null,
-                RedGCells = evo.RedGCells != null ? (int[])evo.RedGCells.Clone() : null
-            };
+            if (evo == null) return null;
+            return JsonSerializer.Deserialize<Evolution>(JsonSerializer.Serialize(evo, DedupJsonOptions));
         }
 
         /// <summary>

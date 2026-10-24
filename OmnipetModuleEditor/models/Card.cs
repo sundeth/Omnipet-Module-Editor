@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
 
 namespace OmnipetModuleEditor.Models
 {
@@ -20,9 +21,17 @@ namespace OmnipetModuleEditor.Models
         public const string TypeDdpChip = "DDP Chip";
         public const string TypeIdPlate = "iD Plate";
         public const string TypeCustom = "Custom";
+        /// <summary>A card to collect and look at, with no use: the game
+        /// offers VIEW, a close-up of its front and back, instead of USE
+        /// (Digimon World's cards).</summary>
+        public const string TypeCollectible = "Collectible";
 
         public static readonly string[] AllTypes =
-            { TypeSoulPlate, TypeDdpChip, TypeIdPlate, TypeCustom };
+            { TypeSoulPlate, TypeDdpChip, TypeIdPlate, TypeCustom, TypeCollectible };
+
+        /// <summary>Whether a card type has its own uploaded art and no
+        /// card-maker data.</summary>
+        public static bool OwnArt(string type) => type == TypeCustom || type == TypeCollectible;
 
         public static readonly string[] Rarities = { "Common", "Rare", "Legendary" };
 
@@ -60,6 +69,13 @@ namespace OmnipetModuleEditor.Models
         [JsonPropertyName("number")]
         public int Number { get; set; }
 
+        /// <summary>
+        /// Optional printed identifier for non-numeric official cards (for
+        /// example "SP1"). Number remains a numeric sort key.
+        /// </summary>
+        [JsonPropertyName("number_label")]
+        public string NumberLabel { get; set; }
+
         [JsonPropertyName("series")]
         public string Series { get; set; }
 
@@ -87,7 +103,11 @@ namespace OmnipetModuleEditor.Models
 
         [JsonIgnore]
         public string DisplayLabel =>
-            Type == TypeSoulPlate ? (Name ?? "") : $"{Name} (#{Number})";
+            Type == TypeSoulPlate ? (Name ?? "") : $"{Name} (#{DisplayNumber})";
+
+        [JsonIgnore]
+        public string DisplayNumber =>
+            string.IsNullOrWhiteSpace(NumberLabel) ? Number.ToString() : NumberLabel;
 
         /// <summary>The RFID payload value string ("01011", "01011-L", "01011-R").</summary>
         [JsonIgnore]
@@ -102,7 +122,8 @@ namespace OmnipetModuleEditor.Models
                 ["id"] = Id,
                 ["name"] = Name ?? "",
                 ["value"] = RfidValue,
-                ["number"] = Number,
+                ["number"] = string.IsNullOrWhiteSpace(NumberLabel)
+                    ? (object)Number : NumberLabel,
             };
             if (int.TryParse(Series, out int s)) payload["series"] = s;
             else if (!string.IsNullOrEmpty(Series)) payload["series"] = Series;
@@ -128,10 +149,21 @@ namespace OmnipetModuleEditor.Models
     /// </summary>
     public class CardEffectGroup
     {
+        public const string ToolAny = "Any";
+        public const string ToolPlateCharge = "Plate Charge";
+        public const string ToolDigiSoulCharge = "DigiSoul Charge";
+
+        public static readonly string[] Tools =
+            { ToolAny, ToolPlateCharge, ToolDigiSoulCharge };
+
+        /// <summary>The reader/menu operation that interprets this value.</summary>
+        [JsonPropertyName("tool")]
+        public string Tool { get; set; } = ToolAny;
+
         [JsonPropertyName("value")]
         public string Value { get; set; }
 
-        /// <summary>"Any" (default), "L" or "R" — only meaningful for 5-bit values.</summary>
+        /// <summary>"Any" (default), "L", "R", or "L/R" (both buttons).</summary>
         [JsonPropertyName("lr")]
         public string Lr { get; set; } = "Any";
 
@@ -140,7 +172,8 @@ namespace OmnipetModuleEditor.Models
 
         [JsonIgnore]
         public string DisplayLabel =>
-            (Lr == "L" || Lr == "R") ? $"{Value}-{Lr}" : Value;
+            $"{Tool ?? ToolAny}: {Value}" +
+            (Lr == "L" || Lr == "R" || Lr == "L/R" ? $"-{Lr}" : "");
     }
 
     public class CardEffect
@@ -188,7 +221,7 @@ namespace OmnipetModuleEditor.Models
                 switch (Type)
                 {
                     case "Item": desc = $"Item: {Item} x{Amount ?? 1}"; break;
-                    case "DNA": desc = $"DNA: {Dna} x{Amount ?? 1}"; break;
+                    case "DNA": desc = $"DigiSoul: {Dna} x{Amount ?? 1}"; break;
                     case "Encounter": desc = $"Encounter: area {Area ?? 0}, round {Round ?? 0}"; break;
                     case "Unlock": desc = $"Unlock: {Unlock}"; break;
                     default: desc = Type ?? "?"; break;
@@ -239,7 +272,7 @@ namespace OmnipetModuleEditor.Models
         public const string DdpSharedBack = "DDP Chip_back.png";
 
         [JsonPropertyName("schema_version")]
-        public int SchemaVersion { get; set; } = 1;
+        public int SchemaVersion { get; set; } = 2;
 
         [JsonPropertyName("cards")]
         public List<CollectionCard> Cards { get; set; } = new List<CollectionCard>();
@@ -262,6 +295,7 @@ namespace OmnipetModuleEditor.Models
             {
                 var file = JsonSerializer.Deserialize<CollectionFile>(File.ReadAllText(path));
                 if (file == null) return new CollectionFile();
+                file.SchemaVersion = Math.Max(2, file.SchemaVersion);
                 file.Cards = file.Cards ?? new List<CollectionCard>();
                 file.Effects = file.Effects ?? new List<CardEffectGroup>();
                 file.Packs = file.Packs ?? new List<CardPack>();
@@ -279,6 +313,17 @@ namespace OmnipetModuleEditor.Models
             // don't create cards.json for modules that never had a collection
             if (IsEmpty && !File.Exists(path))
                 return;
+            // DDP Chips share one back (cards/DDP Chip_back.png), but the game
+            // reads only each card's own sprites.back (card_utils): a chip
+            // without one is given the shared file, so the back the editor
+            // previews is the back the game shows.
+            string sharedBack = SpritesFolder + "/" + DdpSharedBack;
+            if (File.Exists(Path.Combine(modulePath, SpritesFolder, DdpSharedBack)))
+                foreach (var card in Cards.Where(c => c != null && c.Type == CollectionCard.TypeDdpChip))
+                {
+                    if (card.Sprites == null) card.Sprites = new CardSprites();
+                    if (string.IsNullOrEmpty(card.Sprites.Back)) card.Sprites.Back = sharedBack;
+                }
             var options = new JsonSerializerOptions
             {
                 WriteIndented = true,
@@ -293,11 +338,19 @@ namespace OmnipetModuleEditor.Models
             if (type == CollectionCard.TypeSoulPlate) return 0;
             int max = 0;
             foreach (var c in Cards)
-                if (c.Type == type && c.Number > max) max = c.Number;
+                if (c.Type == type && string.IsNullOrEmpty(c.NumberLabel) && c.Number > max)
+                    max = c.Number;
             return max + 1;
         }
 
-        /// <summary>Cards ordered for display: by type, then number, Souls alphabetical.</summary>
+        private static string NaturalSeriesKey(string series)
+        {
+            return Regex.Replace((series ?? "").ToUpperInvariant(), @"\d+",
+                match => match.Value.PadLeft(10, '0'));
+        }
+
+        /// <summary>Cards ordered for display. iD Plates use series then
+        /// number; Soul Plates remain alphabetical.</summary>
         public List<CollectionCard> Ordered()
         {
             int TypeOrder(string t)
@@ -307,6 +360,8 @@ namespace OmnipetModuleEditor.Models
             }
             return Cards
                 .OrderBy(c => TypeOrder(c.Type))
+                .ThenBy(c => c.Type == CollectionCard.TypeIdPlate
+                    ? NaturalSeriesKey(c.Series) : "")
                 .ThenBy(c => c.Number)
                 .ThenBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
                 .ToList();

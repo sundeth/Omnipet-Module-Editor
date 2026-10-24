@@ -6,16 +6,30 @@ namespace OmnipetModuleEditor.docgenerators
 {
     internal class UnlockGenerator
     {
-        public static void GenerateUnlocksPage(string docPath, Module module)
+        public static void GenerateUnlocksPage(string docPath, Module module, string modulePath)
         {
             string template = GeneratorUtils.GetTemplateContent("unlocks.html");
             var sb = new StringBuilder();
+            var cards = CollectionFile.Load(modulePath).Cards;
 
             if (module?.Unlocks != null)
             {
                 foreach (var unlock in module.Unlocks)
                 {
                     string description = GenerateUnlockDescription(unlock);
+                    if (!string.IsNullOrWhiteSpace(unlock.Card))
+                    {
+                        var card = cards.Find(c => c.Id == unlock.Card);
+                        string label = card?.DisplayLabel ?? unlock.Card;
+                        string finish = card?.Type == CollectionCard.TypeSoulPlate
+                            ? " (DigiSoul Plates are never shiny)"
+                            : " as a shiny card";
+                        description += $" Rewards {label}{finish}.";
+                    }
+                    if (!string.IsNullOrWhiteSpace(unlock.CardPack))
+                        description += $" Gives the card pack {unlock.CardPack}.";
+                    if (unlock.UnlocksArea.HasValue && unlock.UnlocksArea > 0)
+                        description += $" Opens adventure area {unlock.UnlocksArea}.";
                     
                     sb.AppendLine("<tr>");
                     sb.AppendLine($"  <td>{unlock.Label ?? "Unnamed"}</td>");
@@ -139,11 +153,29 @@ namespace OmnipetModuleEditor.docgenerators
                     return pvpDesc.ToString();
 
                 case "versus":
-                    var versusDesc = new StringBuilder("Unlocked by participating in Versus battles between pets of the same owner");
-                    if (unlock.Amount.HasValue && unlock.Amount > 0)
-                    {
-                        versusDesc.Append($" and completing {unlock.Amount} Versus matches");
-                    }
+                    var versusDesc = new StringBuilder(unlock.Outcome == "win"
+                        ? "Unlocked by winning a connection battle" : "Unlocked by a connection battle");
+                    if (unlock.DeviceVersion.HasValue)
+                        versusDesc.Append($" from device version {unlock.DeviceVersion}");
+                    else if (unlock.Version.HasValue && unlock.OpponentDeviceVersion == null
+                             && (unlock.OpponentDeviceVersions == null || unlock.OpponentDeviceVersions.Count == 0))
+                        versusDesc.Append($" with a version {unlock.Version} Digimon");
+                    if (unlock.OpponentDeviceVersions != null && unlock.OpponentDeviceVersions.Count > 0)
+                        versusDesc.Append($" against device version {string.Join(", ", unlock.OpponentDeviceVersions)}");
+                    else if (unlock.OpponentDeviceVersion == -1)
+                        versusDesc.Append(" against any other device");
+                    else if (unlock.OpponentDeviceVersion.HasValue)
+                        versusDesc.Append($" against device version {unlock.OpponentDeviceVersion}");
+                    if (unlock.OwnNames != null && unlock.OwnNames.Count > 0)
+                        versusDesc.Append($" with {string.Join(" or ", unlock.OwnNames)}");
+                    if (unlock.OpponentNames != null && unlock.OpponentNames.Count > 0)
+                        versusDesc.Append($" against {string.Join(" or ", unlock.OpponentNames)}");
+                    if (!string.IsNullOrEmpty(unlock.Protocol))
+                        versusDesc.Append($" on the {unlock.Protocol} protocol");
+                    if (unlock.Amount.HasValue && unlock.Amount > 1)
+                        versusDesc.Append(unlock.Distinct == true
+                            ? $", with {unlock.Amount} different devices"
+                            : $", {unlock.Amount} times");
                     versusDesc.Append(".");
                     return versusDesc.ToString();
 
@@ -159,6 +191,13 @@ namespace OmnipetModuleEditor.docgenerators
                     }
                     battleDesc.Append(".");
                     return battleDesc.ToString();
+
+                case "encounter":
+                    // utils_unlocks.check_encounter_unlocks: an amount of Friends, or
+                    // the enemy whose Unlock names it (a Friend joining, an Event Battle).
+                    if (unlock.Amount.HasValue && unlock.Amount > 0)
+                        return $"Unlocked once {unlock.Amount} Friends have joined.";
+                    return "Unlocked by beating the enemy that grants it (its Unlock in the enemies list).";
 
                 default:
                     var genericDesc = new StringBuilder($"Unlocked not yet available");

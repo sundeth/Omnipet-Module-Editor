@@ -32,6 +32,14 @@ namespace OmnipetModuleEditor.Models
         [JsonPropertyName("version")]
         public int? Version { get; set; }
 
+        /// <summary>The hardware the granted pet counts as (devices.json
+        /// device_version), copied onto it by the game (password_utils
+        /// _redeem_pet): a Copymon is a doll of a Digimon from another
+        /// device. Null: the pet's own.</summary>
+        [JsonPropertyName("device_version")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public int? DeviceVersion { get; set; }
+
         // type == unlock
         [JsonPropertyName("unlock")]
         public string Unlock { get; set; }

@@ -43,7 +43,7 @@ namespace OmnipetModuleEditor.OmniNet
             // Info label
             lblInfo = new Label
             {
-                Text = "Generate a code to link your game device.\n\nIn-game, go to Connect > Account > Link Account\nand enter the code shown below.",
+                Text = "Generate a code to link your game device.\n\nIn the game, press Link Device on the\nOMNINET ACCOUNT screen and enter the code.",
                 Dock = DockStyle.Fill,
                 AutoSize = false,
                 Height = 80,

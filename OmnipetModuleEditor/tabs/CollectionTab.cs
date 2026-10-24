@@ -96,6 +96,29 @@ namespace OmnipetModuleEditor.Tabs
 
         private List<CollectionCard> filteredCards = new List<CollectionCard>();
         private CollectionCard selectedCard;
+
+        /// <summary>Explains the card, effect and pack fields. Kept as a
+        /// field so it outlives the layout code - a ToolTip that goes out
+        /// of scope stops showing.</summary>
+        private readonly ToolTip cardTips = new ToolTip
+        {
+            AutoPopDelay = 20000,
+            InitialDelay = 300,
+            ReshowDelay = 200,
+            ShowAlways = true
+        };
+
+        /// <summary>Tip a field and the anonymous label sitting in column 0
+        /// of its row.</summary>
+        private void TipRow(TableLayoutPanel panel, Control field, string text)
+        {
+            if (field == null) return;
+            cardTips.SetToolTip(field, text);
+            var pos = panel.GetPositionFromControl(field);
+            if (pos.Row < 0) return;
+            var lbl = panel.GetControlFromPosition(0, pos.Row);
+            if (lbl != null) cardTips.SetToolTip(lbl, text);
+        }
         private readonly Dictionary<string, Image> thumbCache = new Dictionary<string, Image>();
 
         private Control BuildCardsPage()
@@ -121,6 +144,8 @@ namespace OmnipetModuleEditor.Tabs
             foreach (var t in CollectionCard.AllTypes) cmbFilter.Items.Add(t);
             cmbFilter.SelectedIndex = 0;
             cmbFilter.SelectedIndexChanged += (s, e) => PopulateCardList();
+            cardTips.SetToolTip(cmbFilter,
+                "Narrows the card list to one card type. It only filters the view - nothing is added or removed from the module.");
             leftPanel.Controls.Add(cmbFilter, 0, 0);
 
             lstCards = new ListBox
@@ -212,6 +237,22 @@ namespace OmnipetModuleEditor.Tabs
             rightPanel.Controls.Add(new Label(), 0, row);
             rightPanel.Controls.Add(cardBtns, 1, row++);
 
+
+            TipRow(rightPanel, txtCardName,
+                "The card\u2019s name, shown in the collection album.");
+            TipRow(rightPanel, cmbCardType,
+                "What kind of card this is. The type decides how it is grouped in the album and which effects make sense on it.");
+            TipRow(rightPanel, txtCardSeries,
+                "Which printed series or set the card belongs to. Cards are grouped by series in the album.");
+            TipRow(rightPanel, numCardNumber,
+                "The card\u2019s number within its series - its position in the album, not a global id.");
+            TipRow(rightPanel, txtCardValue,
+                "The card\u2019s barcode value, the digits the physical card carries. This is what a scanned card is matched on.");
+            TipRow(rightPanel, cmbCardLr,
+                "Which side-button state the plate presses. L/R means both buttons together; it is distinct from L alone and R alone.");
+            TipRow(rightPanel, cmbCardRarity,
+                "Rarity band. A pack draws by each entry’s Odds only; the rarity sets the Odds a card gets when it is added to a pack (Common 70, Rare 25, Legendary 5), and its price in a One Card a Day offer (the shop’s Rarity Prices).");
+
             mainLayout.Controls.Add(rightPanel, 1, 0);
             return mainLayout;
         }
@@ -296,7 +337,7 @@ namespace OmnipetModuleEditor.Tabs
             using (var subFont = new Font(FontFamily.GenericSansSerif, 7.5f))
             {
                 string title = card.Type == CollectionCard.TypeSoulPlate
-                    ? (card.Name ?? "") : $"{card.Name}  #{card.Number}";
+                    ? (card.Name ?? "") : $"{card.Name}  #{card.DisplayNumber}";
                 e.Graphics.DrawString(title, nameFont, nameBrush, e.Bounds.X + 38, e.Bounds.Y + 6);
                 string sub = card.Type + (card.CustomArt ? " (custom art)" : "");
                 e.Graphics.DrawString(sub, subFont, subBrush, e.Bounds.X + 38, e.Bounds.Y + 24);
@@ -405,10 +446,13 @@ namespace OmnipetModuleEditor.Tabs
                 if (r != DialogResult.OK) return;
             }
 
+            int editedNumber = (int)numCardNumber.Value;
+            if (selectedCard.Number != editedNumber)
+                selectedCard.NumberLabel = null;
             selectedCard.Name = txtCardName.Text;
             selectedCard.Type = cmbCardType.SelectedItem.ToString();
             selectedCard.Series = string.IsNullOrWhiteSpace(txtCardSeries.Text) ? null : txtCardSeries.Text.Trim();
-            selectedCard.Number = (int)numCardNumber.Value;
+            selectedCard.Number = editedNumber;
             selectedCard.Value = value;
             selectedCard.Lr = selectedCard.Type == CollectionCard.TypeSoulPlate ? "L/R"
                 : selectedCard.Type == CollectionCard.TypeIdPlate ? (cmbCardLr.SelectedItem?.ToString() ?? "L/R")
@@ -448,11 +492,11 @@ namespace OmnipetModuleEditor.Tabs
                 Number = collection.NextNumber(type),
                 Series = type == CollectionCard.TypeSoulPlate ? null : "1",
                 Value = type == CollectionCard.TypeDdpChip ? "000100" :
-                        type == CollectionCard.TypeCustom ? "0" : "00100",
+                        CollectionCard.OwnArt(type) ? "0" : "00100",
                 Lr = type == CollectionCard.TypeSoulPlate ? "L/R"
                    : type == CollectionCard.TypeIdPlate ? "L/R" : null,
                 Rarity = "Common",
-                CustomArt = type == CollectionCard.TypeCustom,
+                CustomArt = CollectionCard.OwnArt(type),
             };
             collection.Cards.Add(card);
             PopulateCardList();
@@ -629,9 +673,9 @@ namespace OmnipetModuleEditor.Tabs
         private void BtnCardEditArt_Click(object sender, EventArgs e)
         {
             if (selectedCard == null) return;
-            if (selectedCard.Type == CollectionCard.TypeCustom)
+            if (CollectionCard.OwnArt(selectedCard.Type))
             {
-                MessageBox.Show("Custom cards have no card-maker data — edit their sprites directly.",
+                MessageBox.Show(selectedCard.Type + " cards have no card-maker data — edit their sprites directly.",
                     "Edit Art", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
@@ -663,14 +707,23 @@ namespace OmnipetModuleEditor.Tabs
                         node["binary"] = selectedCard.Value;
                         break;
                     case CollectionCard.TypeIdPlate:
-                        node["series"] = selectedCard.Series ?? "1";
-                        node["card_number"] = selectedCard.Number.ToString();
+                        string makerSeries = node["series"]?.GetValue<string>();
+                        if (makerSeries == "custom" && !string.IsNullOrEmpty(selectedCard.NumberLabel))
+                        {
+                            string printedSeries = selectedCard.Series ?? "";
+                            if (printedSeries.StartsWith("Promo ", StringComparison.OrdinalIgnoreCase))
+                                printedSeries = printedSeries.Substring(6);
+                            node["series_text"] = printedSeries.PadLeft(2, '0');
+                        }
+                        else
+                            node["series"] = selectedCard.Series ?? "1";
+                        node["card_number"] = selectedCard.DisplayNumber;
                         node["id_binary"] = selectedCard.Value;
                         node["lr"] = selectedCard.Lr ?? "L/R";
                         break;
                     case CollectionCard.TypeDdpChip:
                         node["ddp_file"] = selectedCard.Series ?? "1";
-                        node["card_number"] = selectedCard.Number.ToString();
+                        node["card_number"] = selectedCard.DisplayNumber;
                         node["ddp_binary"] = selectedCard.Value;
                         break;
                 }
@@ -762,12 +815,13 @@ namespace OmnipetModuleEditor.Tabs
 
                 // same type + number + name → ask per card
                 var dup = collection.Cards.FirstOrDefault(c =>
-                    c.Type == cand.Card.Type && c.Number == cand.Card.Number &&
+                    c.Type == cand.Card.Type && c.Series == cand.Card.Series &&
+                    c.DisplayNumber == cand.Card.DisplayNumber &&
                     string.Equals(c.Name, cand.Card.Name, StringComparison.OrdinalIgnoreCase));
                 if (dup != null)
                 {
                     var r = MessageBox.Show(
-                        $"A {cand.Card.Type} card \"{cand.Card.Name}\" #{cand.Card.Number} already exists.\n\n" +
+                        $"A {cand.Card.Type} card \"{cand.Card.Name}\" #{cand.Card.DisplayNumber} already exists.\n\n" +
                         "Yes = override the existing card\nNo = add as a new card\nCancel = skip",
                         "Duplicate card", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question);
                     if (r == DialogResult.Cancel) { skipped++; continue; }
@@ -926,7 +980,19 @@ namespace OmnipetModuleEditor.Tabs
 
             string numberStr = GetString(root, "card_number");
             int number;
-            if (!int.TryParse(numberStr, out number)) number = 0;
+            string numberLabel = null;
+            if (!int.TryParse(numberStr, out number))
+            {
+                int specialNumber;
+                if (!string.IsNullOrEmpty(numberStr) &&
+                    numberStr.StartsWith("SP", StringComparison.OrdinalIgnoreCase) &&
+                    int.TryParse(numberStr.Substring(2), out specialNumber))
+                {
+                    number = 1000 + specialNumber;
+                    numberLabel = numberStr.ToUpperInvariant();
+                }
+                else number = 0;
+            }
 
             switch (type)
             {
@@ -937,12 +1003,22 @@ namespace OmnipetModuleEditor.Tabs
                     break;
                 case CollectionCard.TypeIdPlate:
                     card.Number = number;
-                    card.Series = GetString(root, "series");
+                    card.NumberLabel = numberLabel;
+                    string series = GetString(root, "series");
+                    if (series == "custom" && !string.IsNullOrEmpty(numberLabel))
+                    {
+                        string printedSeries = GetString(root, "series_text");
+                        series = string.IsNullOrWhiteSpace(printedSeries)
+                            ? "Promo"
+                            : "Promo " + printedSeries.Trim().PadLeft(2, '0');
+                    }
+                    card.Series = series;
                     card.Value = GetString(root, "id_binary") ?? "00100";
                     card.Lr = GetString(root, "lr") ?? "L/R";
                     break;
                 case CollectionCard.TypeDdpChip:
                     card.Number = number;
+                    card.NumberLabel = numberLabel;
                     card.Series = GetString(root, "ddp_file");
                     card.Value = GetString(root, "ddp_binary") ?? "000100";
                     break;
@@ -968,7 +1044,7 @@ namespace OmnipetModuleEditor.Tabs
 
         private ListBox lstEffectGroups;
         private TextBox txtGroupValue;
-        private ComboBox cmbGroupLr;
+        private ComboBox cmbGroupTool, cmbGroupLr;
         private ListBox lstGroupEffects;
         private ComboBox cmbFxType, cmbFxItem, cmbFxDna, cmbFxUnlock;
         private NumericUpDown numFxAmount, numFxArea, numFxRound, numFxVersion;
@@ -1007,7 +1083,12 @@ namespace OmnipetModuleEditor.Tabs
             var btnRemove = new Button { Text = "Remove", Width = 70 };
             btnAdd.Click += (s, e) =>
             {
-                var g = new CardEffectGroup { Value = "00100", Lr = "Any" };
+                var g = new CardEffectGroup
+                {
+                    Tool = CardEffectGroup.ToolAny,
+                    Value = "00100",
+                    Lr = "Any"
+                };
                 collection.Effects.Add(g);
                 PopulateEffectGroupList();
                 lstEffectGroups.SelectedIndex = collection.Effects.IndexOf(g);
@@ -1031,13 +1112,18 @@ namespace OmnipetModuleEditor.Tabs
             {
                 Dock = DockStyle.Fill,
                 ColumnCount = 2,
-                RowCount = 12,
+                RowCount = 13,
                 Padding = new Padding(16, 8, 8, 8),
             };
             right.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 90F));
             right.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
 
             int row = 0;
+            right.Controls.Add(new Label { Text = "Tool:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, row);
+            cmbGroupTool = new ComboBox { Dock = DockStyle.Left, Width = 160, DropDownStyle = ComboBoxStyle.DropDownList };
+            cmbGroupTool.Items.AddRange(CardEffectGroup.Tools);
+            right.Controls.Add(cmbGroupTool, 1, row++);
+
             right.Controls.Add(new Label { Text = "Binary:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, row);
             txtGroupValue = new TextBox { Dock = DockStyle.Left, Width = 120, MaxLength = 10, Font = new Font("Consolas", 10) };
             txtGroupValue.TextChanged += (s, e) => cmbGroupLr.Enabled = txtGroupValue.Text.Trim().Length == 5;
@@ -1045,7 +1131,7 @@ namespace OmnipetModuleEditor.Tabs
 
             right.Controls.Add(new Label { Text = "L / R:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, row);
             cmbGroupLr = new ComboBox { Dock = DockStyle.Left, Width = 80, DropDownStyle = ComboBoxStyle.DropDownList, Enabled = false };
-            cmbGroupLr.Items.AddRange(new object[] { "Any", "L", "R" });
+            cmbGroupLr.Items.AddRange(new object[] { "Any", "L", "R", "L/R" });
             right.Controls.Add(cmbGroupLr, 1, row++);
 
             var btnGroupSave = new Button { Text = "Apply", Width = 80, Margin = new Padding(0, 4, 0, 8) };
@@ -1094,7 +1180,7 @@ namespace OmnipetModuleEditor.Tabs
             cmbFxItem = new ComboBox { Dock = DockStyle.Left, Width = 200, DropDownStyle = ComboBoxStyle.DropDownList };
             right.Controls.Add(cmbFxItem, 1, row++);
 
-            lblFxDna = new Label { Text = "DNA:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill };
+            lblFxDna = new Label { Text = "DigiSoul:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill };
             right.Controls.Add(lblFxDna, 0, row);
             cmbFxDna = new ComboBox { Dock = DockStyle.Left, Width = 160, DropDownStyle = ComboBoxStyle.DropDownList };
             cmbFxDna.Items.AddRange(CardEffect.DnaOptions);
@@ -1129,6 +1215,32 @@ namespace OmnipetModuleEditor.Tabs
             right.Controls.Add(new Label(), 0, row);
             right.Controls.Add(btnFxApply, 1, row++);
 
+
+            TipRow(right, cmbGroupTool,
+                "The device menu used to interpret the sensor pattern. Plate Charge reads L/R buttons; DigiSoul Charge reads only the conductive pattern. Any preserves older generic effect tables.");
+            TipRow(right, txtGroupValue,
+                "The binary/barcode value this group of effects applies to. A five-character value enables the L / R selector below, because only those are read per slot.");
+            TipRow(right, cmbGroupLr,
+                "Restricts the group to L, R, or both buttons (L/R). Enabled only for a five-character value; Any means every side-button state.");
+            TipRow(right, lstGroupEffects,
+                "Everything this card does when scanned. A card may carry several effects, applied together.");
+            TipRow(right, cmbFxType,
+                "What this one effect does. The fields below show and hide to match - only the ones this type uses are visible.");
+            TipRow(right, cmbFxItem,
+                "Item granted by the effect. It must be an item declared on the Items tab.");
+            TipRow(right, cmbFxDna,
+                "DigiSoul family the effect adds. X of each grants one amount to every family.");
+            TipRow(right, numFxAmount,
+                "How much the effect is worth - copies of the item, or the size of the change.");
+            TipRow(right, numFxArea,
+                "Adventure area the effect points at.");
+            TipRow(right, numFxRound,
+                "Round within that area.");
+            TipRow(right, cmbFxUnlock,
+                "Unlock granted by the effect. Unlocks are module-global and permanent.");
+            TipRow(right, numFxVersion,
+                "Restricts the effect to one version roster. -1 means it applies on every version.");
+
             mainLayout.Controls.Add(right, 1, 0);
             UpdateEffectFieldVisibility();
             return mainLayout;
@@ -1157,6 +1269,8 @@ namespace OmnipetModuleEditor.Tabs
                 return;
             }
             selectedGroup = collection.Effects[lstEffectGroups.SelectedIndex];
+            cmbGroupTool.SelectedItem = string.IsNullOrEmpty(selectedGroup.Tool)
+                ? CardEffectGroup.ToolAny : selectedGroup.Tool;
             txtGroupValue.Text = selectedGroup.Value ?? "";
             cmbGroupLr.SelectedItem = string.IsNullOrEmpty(selectedGroup.Lr) ? "Any" : selectedGroup.Lr;
             cmbGroupLr.Enabled = (selectedGroup.Value ?? "").Length == 5;
@@ -1248,6 +1362,8 @@ namespace OmnipetModuleEditor.Tabs
                 return;
             }
             selectedGroup.Value = value;
+            selectedGroup.Tool = cmbGroupTool.SelectedItem?.ToString()
+                ?? CardEffectGroup.ToolAny;
             selectedGroup.Lr = value.Length == 5 ? (cmbGroupLr.SelectedItem?.ToString() ?? "Any") : "Any";
             int keep = collection.Effects.IndexOf(selectedGroup);
             PopulateEffectGroupList();
@@ -1361,6 +1477,13 @@ namespace OmnipetModuleEditor.Tabs
             right.Controls.Add(numPackShine, 1, row++);
 
             right.Controls.Add(new Label { Text = "Cards / odds:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, row);
+            TipRow(right, txtPackName,
+                "Name of the booster pack as the player sees it in the shop.");
+            TipRow(right, numPackCards,
+                "How many cards one pack contains.");
+            TipRow(right, numPackShine,
+                "Chance, as a percentage, that a drawn card comes out shiny. Fractional values are allowed, so 0.05 is one in two thousand.");
+
             gridPack = new DataGridView
             {
                 Dock = DockStyle.Fill,
@@ -1386,7 +1509,11 @@ namespace OmnipetModuleEditor.Tabs
                 DataPropertyName = "Odds",
                 Width = 70,
             };
+            colCard.ToolTipText =
+                "A card that can come out of this pack. Every card in the pack must be one declared on the Cards list.";
             gridPack.Columns.Add(colCard);
+            colOdds.ToolTipText =
+                "How likely this card is relative to the others in the pack - a weight, not a percentage, so the numbers do not have to add up to 100.";
             gridPack.Columns.Add(colOdds);
             right.Controls.Add(gridPack, 1, row++);
             right.RowStyles.Clear();
@@ -1593,13 +1720,17 @@ namespace OmnipetModuleEditor.Tabs
 
                 int conflicts = 0;
                 if (impCards) conflicts += source.Cards.Count(c => collection.Cards.Any(x => x.Id == c.Id));
-                if (impEffects) conflicts += source.Effects.Count(g => collection.Effects.Any(x => x.Value == g.Value && (x.Lr ?? "Any") == (g.Lr ?? "Any")));
+                if (impEffects) conflicts += source.Effects.Count(g => collection.Effects.Any(x =>
+                    x.Value == g.Value
+                    && (x.Lr ?? "Any") == (g.Lr ?? "Any")
+                    && (x.Tool ?? CardEffectGroup.ToolAny)
+                        == (g.Tool ?? CardEffectGroup.ToolAny)));
                 if (impPacks) conflicts += source.Packs.Count(p => collection.Packs.Any(x => x.Id == p.Id));
                 bool replace = false;
                 if (conflicts > 0)
                 {
                     var r = MessageBox.Show(
-                        $"{conflicts} entrie(s) already exist in this module.\nReplace the existing ones?",
+                        $"{conflicts} entry(s) already exist in this module.\nReplace the existing ones?",
                         "Import Collection", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
                     replace = r == DialogResult.Yes;
                 }
@@ -1626,7 +1757,10 @@ namespace OmnipetModuleEditor.Tabs
                     foreach (var g in source.Effects)
                     {
                         var existing = collection.Effects.FirstOrDefault(x =>
-                            x.Value == g.Value && (x.Lr ?? "Any") == (g.Lr ?? "Any"));
+                            x.Value == g.Value
+                            && (x.Lr ?? "Any") == (g.Lr ?? "Any")
+                            && (x.Tool ?? CardEffectGroup.ToolAny)
+                                == (g.Tool ?? CardEffectGroup.ToolAny));
                         if (existing != null)
                         {
                             if (!replace) continue;
@@ -1655,7 +1789,7 @@ namespace OmnipetModuleEditor.Tabs
                 PopulateCardList();
                 PopulateEffectGroupList();
                 PopulatePackList();
-                MessageBox.Show($"Imported {imported} entrie(s).", "Import Collection",
+                MessageBox.Show($"Imported {imported} entry(s).", "Import Collection",
                     MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
         }

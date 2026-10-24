@@ -298,6 +298,8 @@ namespace OmnipetModuleEditor.Tabs
             body.Controls.Add(fields, 1, 0);
             group.Controls.Add(body);
 
+            toolTip.SetToolTip(txtName,
+                "The device\u2019s display name, shown when the player picks which device to raise on. It is the device shell, not the module - one module can declare several.");
             txtName.TextChanged += (s, e) => MarkDirty();
             numDeviceVersion.ValueChanged += (s, e) => MarkDirty();
             numBackgroundX.ValueChanged += (s, e) => { MarkDirty(); UpdatePreview(); };
@@ -944,6 +946,9 @@ namespace OmnipetModuleEditor.Tabs
         {
             if (string.IsNullOrWhiteSpace(modulePath)) return;
             string path = Path.Combine(modulePath, "devices.json");
+            // A module without devices.json keeps the old egg flow
+            // (game_module.load_devices): Save does not create an empty one.
+            if ((devices == null || devices.Count == 0) && !File.Exists(path)) return;
             try
             {
                 var options = new JsonSerializerOptions

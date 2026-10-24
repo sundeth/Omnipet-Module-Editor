@@ -11,9 +11,9 @@ namespace OmnipetModuleEditor
 {
     /// <summary>
     /// Dialog for editing temporary (battle-only) evolution criteria:
-    /// Mode Change / Xros type, strength range, megahit, unlock and friend
-    /// pets — plus, for Xros only, the background and animation used by the
-    /// in-game xros sequence.
+    /// Mode Change / Xros type, strength range, megahit, unlock, friend
+    /// pets, friend count, battle area and DP cost — plus, for Xros only, the
+    /// background and animation used by the in-game xros sequence.
     /// </summary>
     public class TempEvolutionCriteriaForm : Form
     {
@@ -27,10 +27,31 @@ namespace OmnipetModuleEditor
 
         private ComboBox cmbType;
         private NumericUpDown[] numStrength = new NumericUpDown[2];
+
+    /// <summary>What each condition really gates. Kept as a field so it
+    /// outlives the layout code - a ToolTip that goes out of scope stops
+    /// showing.</summary>
+    private readonly ToolTip tempTips = new ToolTip
+    {
+        AutoPopDelay = 20000,
+        InitialDelay = 300,
+        ReshowDelay = 200,
+        ShowAlways = true
+    };
+
+    private void SetTipDeep(Control control, string tip)
+    {
+        tempTips.SetToolTip(control, tip);
+        foreach (Control child in control.Controls)
+            SetTipDeep(child, tip);
+    }
         private CheckBox chkMegahit;
         private ComboBox cmbUnlock;
         private TextBox txtFriend;
         private List<string> friendSelection = new List<string>();
+        private readonly NumericUpDown[] numFriendCount = new NumericUpDown[2];
+        private readonly NumericUpDown[] numBattleArea = new NumericUpDown[2];
+        private NumericUpDown numXrosCost;
 
         // Xros-only configuration
         private ComboBox cmbBackground;
@@ -204,7 +225,7 @@ namespace OmnipetModuleEditor
         private void InitializeComponent()
         {
             this.Text = "Temporary Evolution Criteria";
-            this.Size = new Size(440, 480);
+            this.Size = new Size(440, 540);
             this.FormBorderStyle = FormBorderStyle.FixedDialog;
             this.MaximizeBox = false;
             this.MinimizeBox = false;
@@ -222,23 +243,31 @@ namespace OmnipetModuleEditor
 
             int row = 0;
 
+            Label lastLabel = null;
             void AddLabel(string text)
             {
-                layout.Controls.Add(new Label
+                var lbl = new Label
                 {
                     Text = text,
                     Anchor = AnchorStyles.Left,
                     AutoSize = true,
                     Font = new Font("Segoe UI", 8),
                     Margin = new Padding(0, 6, 0, 0)
-                }, 0, row);
+                };
+                layout.Controls.Add(lbl, 0, row);
+                lastLabel = lbl;
             }
 
-            void AddControl(Control control)
+            void AddControl(Control control, string tip = null)
             {
                 control.Margin = new Padding(0, 4, 0, 0);
                 layout.Controls.Add(control, 1, row);
                 row++;
+                if (!string.IsNullOrEmpty(tip))
+                {
+                    if (lastLabel != null) tempTips.SetToolTip(lastLabel, tip);
+                    SetTipDeep(control, tip);
+                }
             }
 
             // Type
@@ -246,7 +275,7 @@ namespace OmnipetModuleEditor
             cmbType = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 130 };
             cmbType.Items.AddRange(new object[] { TempEvolution.TYPE_MODE_CHANGE, TempEvolution.TYPE_XROS });
             cmbType.SelectedIndexChanged += (s, e) => UpdateXrosFieldState();
-            AddControl(cmbType);
+            AddControl(cmbType, "Mode Change or DigiXros. Both are battle-only forms: the pet wears it for the fight and reverts afterwards, so nothing should evolve into one and it needs no Special Key. The type decides how the form is presented and coloured.");
 
             // Strength range (-1 = disabled, 999999 = infinite — same as normal criteria)
             AddLabel("Strength:");
@@ -266,12 +295,12 @@ namespace OmnipetModuleEditor
                 Padding = new Padding(4, 6, 4, 0)
             });
             rangePanel.Controls.Add(numStrength[1]);
-            AddControl(rangePanel);
+            AddControl(rangePanel, "Range the pet\u2019s Strength stat must be in for this form to be offered. 999999 in the right box means \"or more\"; leave it at -1 to not use the criterion.");
 
             // Megahit
             AddLabel("Megahit:");
             chkMegahit = new CheckBox();
-            AddControl(chkMegahit);
+            AddControl(chkMegahit, "A battle-time condition, NOT a gate on choosing the form - it does not affect whether the form is offered before the fight starts.");
 
             // Unlock
             AddLabel("Unlock:");
@@ -279,7 +308,7 @@ namespace OmnipetModuleEditor
             cmbUnlock.Items.Add(""); // none
             foreach (var name in unlockNames)
                 cmbUnlock.Items.Add(name);
-            AddControl(cmbUnlock);
+            AddControl(cmbUnlock, "A module unlock the player must already hold for this form to be offered. Leave it empty for no unlock requirement.");
 
             // Friend (pet list)
             AddLabel("Friend:");
@@ -305,17 +334,62 @@ namespace OmnipetModuleEditor
             };
             friendPanel.Controls.Add(txtFriend);
             friendPanel.Controls.Add(btnFriend);
-            AddControl(friendPanel);
+            AddControl(friendPanel, "Friends that must be registered before this form is offered. A Friend is registered by beating its special encounter - the pet declared with Availability \"Friend\" on the Pets tab. A pet can only ever earn the Friends its own forms ask for.");
+
+            // Friend count (how many Friends the module's list holds)
+            AddLabel("Friend count:");
+            var countPanel = new FlowLayoutPanel
+            {
+                FlowDirection = FlowDirection.LeftToRight,
+                AutoSize = true,
+                WrapContents = false
+            };
+            numFriendCount[0] = new NumericUpDown { Minimum = -1, Maximum = 999999, Width = 70, Value = -1 };
+            numFriendCount[1] = new NumericUpDown { Minimum = -1, Maximum = 999999, Width = 70, Value = -1 };
+            countPanel.Controls.Add(numFriendCount[0]);
+            countPanel.Controls.Add(new Label
+            {
+                Text = "to",
+                AutoSize = true,
+                Padding = new Padding(4, 6, 4, 0)
+            });
+            countPanel.Controls.Add(numFriendCount[1]);
+            AddControl(countPanel, "How many Friends the module's Friend list must hold for this form to be offered (DMXW's Shoutmon X7: Superior Mode, 13 or more). 999999 in the right box means \"or more\"; leave both at -1 to not use the criterion.");
+
+            // Battle area (the area the battle is fought in; 0 = any other battle)
+            AddLabel("Battle area:");
+            var areaPanel = new FlowLayoutPanel
+            {
+                FlowDirection = FlowDirection.LeftToRight,
+                AutoSize = true,
+                WrapContents = false
+            };
+            numBattleArea[0] = new NumericUpDown { Minimum = -1, Maximum = 999999, Width = 70, Value = -1 };
+            numBattleArea[1] = new NumericUpDown { Minimum = -1, Maximum = 999999, Width = 70, Value = -1 };
+            areaPanel.Controls.Add(numBattleArea[0]);
+            areaPanel.Controls.Add(new Label
+            {
+                Text = "to",
+                AutoSize = true,
+                Padding = new Padding(4, 6, 4, 0)
+            });
+            areaPanel.Controls.Add(numBattleArea[1]);
+            AddControl(areaPanel, "The area the battle must be fought in for this form to be offered: an adventure area of this module, or 0 for any other battle (events and special encounters, Versus, DCom). DMXW's Arresterdramon: Superior Mode is 0 to 19 (\"not available during World 20\"), its Brave Snatcher 20 to 20 (\"only available during World 20\"). 999999 in the right box means \"or more\"; leave both at -1 to not use the criterion.");
+
+            // DP cost
+            AddLabel("DP cost:");
+            numXrosCost = new NumericUpDown { Minimum = 0, Maximum = 999, Width = 70, Value = 0 };
+            AddControl(numXrosCost, "DP the form costs. It is offered only to a pet holding that much DP, and taking it spends the DP as the battle starts; DP comes back as the module gives it (sleep, Protein). DMXW's DigiXros: humulos's \"Required DP\", 1 for Shoutmon X2 up to 7 for Shoutmon X7. 0 = free.");
 
             // Xros-only: Background (module backgrounds folder, no "_high" files)
             AddLabel("Background:");
             cmbBackground = MakeThumbCombo(backgroundThumbs);
-            AddControl(cmbBackground);
+            AddControl(cmbBackground, "Background shown while this form is active in battle. Leave empty to keep the current one.");
 
             // Xros-only: Animation (module animations folder, "name_frame" files)
             AddLabel("Animation:");
             cmbAnimation = MakeThumbCombo(animationThumbs);
-            AddControl(cmbAnimation);
+            AddControl(cmbAnimation, "Transformation animation played when the form is entered.");
 
             // Buttons
             btnSave = new Button { Text = "Save", Width = 80, DialogResult = DialogResult.OK };
@@ -375,6 +449,32 @@ namespace OmnipetModuleEditor
         // Load / Save
         // =====================================================================
 
+        private static void SetRange(NumericUpDown[] pair, int[] range)
+        {
+            bool set = range != null && range.Length >= 2;
+            pair[0].Value = set ? Math.Max(-1, Math.Min(999999, range[0])) : -1;
+            pair[1].Value = set ? Math.Max(-1, Math.Min(999999, range[1])) : -1;
+        }
+
+        private static int[] GetRange(NumericUpDown[] pair)
+        {
+            int a = (int)pair[0].Value;
+            int b = (int)pair[1].Value;
+            return (a == -1 && b == -1) ? null : new[] { a, b };
+        }
+
+        private void SetCost(int? cost)
+        {
+            numXrosCost.Value = Math.Max(0, Math.Min(999, cost ?? 0));
+        }
+
+        /// <summary>The DP cost, or null when free (not written).</summary>
+        private int? GetCost()
+        {
+            int cost = (int)numXrosCost.Value;
+            return cost > 0 ? (int?)cost : null;
+        }
+
         private static void SelectComboValue(ComboBox cmb, string value)
         {
             if (!string.IsNullOrEmpty(value) && cmb.Items.Contains(value))
@@ -408,6 +508,9 @@ namespace OmnipetModuleEditor
                 ? new List<string>(evolution.Friend)
                 : new List<string>();
             UpdateFriendText();
+            SetRange(numFriendCount, evolution.FriendCount);
+            SetRange(numBattleArea, evolution.BattleArea);
+            SetCost(evolution.XrosCost);
 
             SelectComboValue(cmbBackground, evolution.Background);
             SelectComboValue(cmbAnimation, evolution.Animation);
@@ -428,6 +531,9 @@ namespace OmnipetModuleEditor
             evolution.Unlock = string.IsNullOrEmpty(unlock) ? null : unlock;
 
             evolution.Friend = friendSelection.Count > 0 ? new List<string>(friendSelection) : null;
+            evolution.FriendCount = GetRange(numFriendCount);
+            evolution.BattleArea = GetRange(numBattleArea);
+            evolution.XrosCost = GetCost();
 
             bool isXros = evolution.Type == TempEvolution.TYPE_XROS;
             string bg = cmbBackground.SelectedItem?.ToString();
@@ -451,6 +557,9 @@ namespace OmnipetModuleEditor
             string unlock = cmbUnlock.SelectedItem?.ToString();
             copy.Unlock = string.IsNullOrEmpty(unlock) ? null : unlock;
             copy.Friend = friendSelection.Count > 0 ? new List<string>(friendSelection) : null;
+            copy.FriendCount = GetRange(numFriendCount);
+            copy.BattleArea = GetRange(numBattleArea);
+            copy.XrosCost = GetCost();
             bool isXros = copy.Type == TempEvolution.TYPE_XROS;
             string bg = cmbBackground.SelectedItem?.ToString();
             string anim = cmbAnimation.SelectedItem?.ToString();
@@ -502,6 +611,9 @@ namespace OmnipetModuleEditor
                 cmbUnlock.SelectedItem = unlockNames.Contains(pasted.Unlock ?? "") ? pasted.Unlock : "";
                 friendSelection = pasted.Friend != null ? new List<string>(pasted.Friend) : new List<string>();
                 UpdateFriendText();
+                SetRange(numFriendCount, pasted.FriendCount);
+                SetRange(numBattleArea, pasted.BattleArea);
+                SetCost(pasted.XrosCost);
                 SelectComboValue(cmbBackground, pasted.Background);
                 SelectComboValue(cmbAnimation, pasted.Animation);
                 UpdateXrosFieldState();

@@ -31,10 +31,16 @@ namespace OmnipetModuleEditor.Tabs
         private NumericUpDown numAmount;
         private ComboBox cmbPet;
         private ComboBox cmbPetVersion;
+        private NumericUpDown numDeviceVersion;
         private ComboBox cmbUnlock;
         private NumericUpDown numArea;
         private NumericUpDown numCooldown;
         private ToolTip toolTip;
+
+        // The whole file's: what the game's Specials menu calls these codes
+        // and the icon it shows for them.
+        private TextBox txtCodesTitle;
+        private ComboBox cmbCodesIcon;
 
         private List<Password> passwords = new List<Password>();
         private string modulePath;
@@ -62,6 +68,7 @@ namespace OmnipetModuleEditor.Tabs
             PopulateItemCombo();
             PopulatePetCombos();
             PopulateUnlockCombo();
+            PopulateCodesIconCombo();
             LoadPasswordsFromJson();
             PopulatePasswordList();
             UpdateTypeFields();
@@ -90,12 +97,36 @@ namespace OmnipetModuleEditor.Tabs
             var leftPanel = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
-                RowCount = 2,
+                RowCount = 3,
                 ColumnCount = 1,
                 BackColor = SystemColors.ControlLight
             };
+            leftPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 62F));
             leftPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
             leftPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 40F));
+
+            // How the game's Specials menu shows these codes: one name and
+            // one icon for the whole file.
+            var codesPanel = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 2,
+                RowCount = 2,
+                Padding = new Padding(2)
+            };
+            codesPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 70F));
+            codesPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            codesPanel.Controls.Add(new Label { Text = "Codes name:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 0);
+            txtCodesTitle = new TextBox { Dock = DockStyle.Fill };
+            toolTip.SetToolTip(txtCodesTitle,
+                "What the Specials menu calls this module's codes, e.g. Copymon for the Pendulum 20th. Empty shows Password.");
+            codesPanel.Controls.Add(txtCodesTitle, 1, 0);
+            codesPanel.Controls.Add(new Label { Text = "Codes icon:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, 1);
+            cmbCodesIcon = new ComboBox { Dock = DockStyle.Fill, DropDownStyle = ComboBoxStyle.DropDownList };
+            toolTip.SetToolTip(cmbCodesIcon,
+                "The icon the Specials menu shows for the codes: a sprite in the module's icons folder. Empty uses the game's keypad.");
+            codesPanel.Controls.Add(cmbCodesIcon, 1, 1);
+            leftPanel.Controls.Add(codesPanel, 0, 0);
 
             lstPasswords = new ListBox
             {
@@ -103,7 +134,7 @@ namespace OmnipetModuleEditor.Tabs
                 Font = new Font(FontFamily.GenericSansSerif, 10, FontStyle.Regular)
             };
             lstPasswords.SelectedIndexChanged += LstPasswords_SelectedIndexChanged;
-            leftPanel.Controls.Add(lstPasswords, 0, 0);
+            leftPanel.Controls.Add(lstPasswords, 0, 1);
 
             var buttonPanel = new FlowLayoutPanel
             {
@@ -118,7 +149,7 @@ namespace OmnipetModuleEditor.Tabs
             btnRemove.Click += BtnRemove_Click;
             buttonPanel.Controls.Add(btnAdd);
             buttonPanel.Controls.Add(btnRemove);
-            leftPanel.Controls.Add(buttonPanel, 0, 1);
+            leftPanel.Controls.Add(buttonPanel, 0, 2);
 
             mainLayout.Controls.Add(leftPanel, 0, 0);
 
@@ -127,7 +158,7 @@ namespace OmnipetModuleEditor.Tabs
             {
                 Dock = DockStyle.Fill,
                 ColumnCount = 2,
-                RowCount = 11,
+                RowCount = 12,
                 Padding = new Padding(16, 8, 8, 8),
                 AutoSize = true
             };
@@ -138,6 +169,8 @@ namespace OmnipetModuleEditor.Tabs
 
             rightPanel.Controls.Add(new Label { Text = "Name:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, row);
             txtName = new TextBox { Dock = DockStyle.Fill };
+            toolTip.SetToolTip(txtName,
+                "Label for this code in the editor and in the module docs. The player never sees it - they only type the Code.");
             rightPanel.Controls.Add(txtName, 1, row++);
 
             rightPanel.Controls.Add(new Label { Text = "Code:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, row);
@@ -147,28 +180,46 @@ namespace OmnipetModuleEditor.Tabs
 
             rightPanel.Controls.Add(new Label { Text = "Type:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, row);
             cmbType = new ComboBox { Dock = DockStyle.Fill, DropDownStyle = ComboBoxStyle.DropDownList };
+            toolTip.SetToolTip(cmbType,
+                "What redeeming the code grants. The fields below grey out to match: only the ones this type uses stay enabled.");
             cmbType.SelectedIndexChanged += (s, e) => UpdateTypeFields();
             rightPanel.Controls.Add(cmbType, 1, row++);
 
             rightPanel.Controls.Add(new Label { Text = "Item:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, row);
             cmbItem = new ComboBox { Dock = DockStyle.Fill, DropDownStyle = ComboBoxStyle.DropDownList };
+            toolTip.SetToolTip(cmbItem,
+                "Item handed over for an item code. It must be an item declared on the Items tab of this module.");
             rightPanel.Controls.Add(cmbItem, 1, row++);
 
             rightPanel.Controls.Add(new Label { Text = "Amount:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, row);
             numAmount = new NumericUpDown { Dock = DockStyle.Left, Minimum = 1, Maximum = 9999, Width = 80, Value = 1 };
+            toolTip.SetToolTip(numAmount,
+                "How many copies of the item the code grants.");
             rightPanel.Controls.Add(numAmount, 1, row++);
 
             rightPanel.Controls.Add(new Label { Text = "Pet:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, row);
             cmbPet = new ComboBox { Dock = DockStyle.Fill, DropDownStyle = ComboBoxStyle.DropDownList };
+            toolTip.SetToolTip(cmbPet,
+                "Pet granted, or the pet the special encounter fights. Pet Version below narrows it to one roster.");
             cmbPet.SelectedIndexChanged += (s, e) => UpdatePetVersionCombo();
             rightPanel.Controls.Add(cmbPet, 1, row++);
 
             rightPanel.Controls.Add(new Label { Text = "Pet Version:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, row);
             cmbPetVersion = new ComboBox { Dock = DockStyle.Left, DropDownStyle = ComboBoxStyle.DropDownList, Width = 80 };
+            toolTip.SetToolTip(cmbPetVersion,
+                "Which version of that pet - the same name can exist on several versions with different stats and routes.");
             rightPanel.Controls.Add(cmbPetVersion, 1, row++);
+
+            rightPanel.Controls.Add(new Label { Text = "Device Version:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, row);
+            numDeviceVersion = new NumericUpDown { Dock = DockStyle.Left, Minimum = -1, Maximum = 999999, Width = 80, Value = -1 };
+            toolTip.SetToolTip(numDeviceVersion,
+                "The hardware the granted pet counts as - a device_version from the Device tab, which battle protocols key off (a Copymon is a doll of a Digimon from another device). -1: the pet's own.");
+            rightPanel.Controls.Add(numDeviceVersion, 1, row++);
 
             rightPanel.Controls.Add(new Label { Text = "Unlock:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, row);
             cmbUnlock = new ComboBox { Dock = DockStyle.Fill, DropDownStyle = ComboBoxStyle.DropDownList };
+            toolTip.SetToolTip(cmbUnlock,
+                "Unlock granted by the code. Unlocks are module-global and permanent, so redeeming this opens whatever it gates for good.");
             rightPanel.Controls.Add(cmbUnlock, 1, row++);
 
             rightPanel.Controls.Add(new Label { Text = "Area:", TextAlign = ContentAlignment.MiddleRight, Dock = DockStyle.Fill }, 0, row);
@@ -312,9 +363,22 @@ namespace OmnipetModuleEditor.Tabs
             }
         }
 
+        /// <summary>The module's icons folder sprites, for the codes' icon.</summary>
+        private void PopulateCodesIconCombo()
+        {
+            cmbCodesIcon.Items.Clear();
+            cmbCodesIcon.Items.Add("");
+            string iconsFolder = Path.Combine(modulePath ?? "", "icons");
+            if (Directory.Exists(iconsFolder))
+                cmbCodesIcon.Items.AddRange(Directory.GetFiles(iconsFolder, "*.png")
+                    .Select(Path.GetFileNameWithoutExtension).OrderBy(n => n).ToArray());
+            cmbCodesIcon.SelectedIndex = 0;
+        }
+
         private void LoadPasswordsFromJson()
         {
             passwords.Clear();
+            txtCodesTitle.Text = "";
             if (string.IsNullOrEmpty(modulePath))
                 return;
 
@@ -327,6 +391,16 @@ namespace OmnipetModuleEditor.Tabs
                     {
                         if (doc.RootElement.TryGetProperty("passwords", out var element))
                             passwords = JsonSerializer.Deserialize<List<Password>>(element.GetRawText());
+                        if (doc.RootElement.TryGetProperty("title", out var title))
+                            txtCodesTitle.Text = title.GetString() ?? "";
+                        if (doc.RootElement.TryGetProperty("icon", out var icon))
+                        {
+                            // An icon whose sprite is missing is still kept.
+                            var name = icon.GetString() ?? "";
+                            if (!cmbCodesIcon.Items.Contains(name))
+                                cmbCodesIcon.Items.Add(name);
+                            cmbCodesIcon.SelectedItem = name;
+                        }
                     }
                 }
                 catch (Exception ex)
@@ -374,6 +448,7 @@ namespace OmnipetModuleEditor.Tabs
                 int idx = cmbPetVersion.Items.IndexOf(pw.Version.Value.ToString());
                 if (idx >= 0) cmbPetVersion.SelectedIndex = idx;
             }
+            numDeviceVersion.Value = Math.Max(numDeviceVersion.Minimum, Math.Min(numDeviceVersion.Maximum, pw.DeviceVersion ?? -1));
             cmbUnlock.SelectedItem = string.IsNullOrEmpty(pw.Unlock) ? "" : pw.Unlock;
             numArea.Value = Math.Max(numArea.Minimum, Math.Min(numArea.Maximum, pw.Area ?? 1));
             numCooldown.Value = Math.Max(numCooldown.Minimum, Math.Min(numCooldown.Maximum, pw.Cooldown));
@@ -389,6 +464,7 @@ namespace OmnipetModuleEditor.Tabs
             numAmount.Value = 1;
             cmbPet.SelectedIndex = 0;
             cmbPetVersion.Items.Clear();
+            numDeviceVersion.Value = -1;
             cmbUnlock.SelectedIndex = 0;
             numArea.Value = 1;
             numCooldown.Value = 0;
@@ -405,6 +481,7 @@ namespace OmnipetModuleEditor.Tabs
             numAmount.Enabled = type == "item";
             cmbPet.Enabled = type == "pet";
             cmbPetVersion.Enabled = type == "pet";
+            numDeviceVersion.Enabled = type == "pet";
             cmbUnlock.Enabled = type == "unlock";
             numArea.Enabled = type == "encounter";
         }
@@ -476,6 +553,8 @@ namespace OmnipetModuleEditor.Tabs
             selectedPassword.Pet = type == "pet" ? (cmbPet.SelectedItem?.ToString() ?? "") : null;
             selectedPassword.Version = type == "pet" && cmbPetVersion.SelectedItem != null
                 ? (int?)int.Parse(cmbPetVersion.SelectedItem.ToString()) : null;
+            selectedPassword.DeviceVersion = type == "pet" && numDeviceVersion.Value >= 0
+                ? (int?)numDeviceVersion.Value : null;
             selectedPassword.Unlock = type == "unlock" ? (cmbUnlock.SelectedItem?.ToString() ?? "") : null;
             selectedPassword.Area = type == "encounter" ? (int?)numArea.Value : null;
         }
@@ -527,7 +606,11 @@ namespace OmnipetModuleEditor.Tabs
                 WriteIndented = true,
                 DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
             };
-            var obj = new { passwords };
+            // The codes' name and icon only when set, so a file without them
+            // keeps its shape.
+            string title = string.IsNullOrWhiteSpace(txtCodesTitle.Text) ? null : txtCodesTitle.Text.Trim();
+            string icon = string.IsNullOrEmpty(cmbCodesIcon.SelectedItem?.ToString()) ? null : cmbCodesIcon.SelectedItem.ToString();
+            var obj = new { title, icon, passwords };
             try
             {
                 string json = JsonSerializer.Serialize(obj, options);

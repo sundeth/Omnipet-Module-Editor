@@ -7,7 +7,8 @@ using System.Threading.Tasks;
 
 namespace OmnipetModuleEditor.Models
 {
-    public enum QuestType { Boss, Training, Battle, Feeding, Evolution, Armor_Evolution, Jogress }
+    // Daily_Gift (7): nothing to do; offered every day, ready to claim (DW1's Meat Farm).
+    public enum QuestType { Boss, Training, Battle, Feeding, Evolution, Armor_Evolution, Jogress, Daily_Gift }
     public enum RewardType { Item, Trophy, Experience, Vital_Values }
 
     public class Quest
