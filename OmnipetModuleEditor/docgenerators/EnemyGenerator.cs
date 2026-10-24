@@ -59,7 +59,17 @@ namespace OmnipetModuleEditor.docgenerators
                         sb.AppendLine($"          <div class=\"enemy-version\">Version {enemy.Version}</div>");
                         sb.AppendLine($"          <div class=\"enemy-stats\">Power: {enemy.Power} | HP: {enemy.Hp}</div>");
                         if (!string.IsNullOrEmpty(enemy.Prize))
-                            sb.AppendLine($"          <div class=\"enemy-prize\">Prize: {enemy.Prize}</div>");
+                            sb.AppendLine($"          <div class=\"enemy-prize\">Prize: {enemy.Prize}{(enemy.PrizeChance != null ? $" ({enemy.PrizeChance}%)" : "")}</div>");
+                        if (!string.IsNullOrEmpty(enemy.PrizeCardPack))
+                            sb.AppendLine($"          <div class=\"enemy-prize\">Card pack: {enemy.PrizeCardPack}</div>");
+                        if (enemy.CurrencyCost != 0 || enemy.CurrencyReward != 0)
+                            sb.AppendLine($"          <div class=\"enemy-prize\">Fee: {enemy.CurrencyCost} | Reward: {enemy.CurrencyReward}</div>");
+                        if (enemy.Handicap != 0)
+                            sb.AppendLine($"          <div class=\"enemy-stats\">Handicap: {enemy.Handicap}</div>");
+                        if (enemy.AttackPattern != null && enemy.AttackPattern.Length > 0)
+                            sb.AppendLine($"          <div class=\"enemy-stats\">Attack pattern: {string.Join("", enemy.AttackPattern)}</div>");
+                        if (enemy.AtkAlt2 != 0)
+                            sb.AppendLine($"          <div class=\"enemy-stats\">Second alternate attack: {enemy.AtkAlt2}</div>");
                         if (!string.IsNullOrEmpty(enemy.Unlock))
                             sb.AppendLine($"          <div class=\"enemy-unlock\">Unlock: {enemy.Unlock}</div>");
                         sb.AppendLine("        </div>");

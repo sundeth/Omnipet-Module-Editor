@@ -102,12 +102,42 @@
                     <h2>Main Settings</h2>
                     <ul class="attribute-list">
                         <li class="attribute-item">
-                            <span class="attribute-label tooltip">Ruleset:
-                                <span class="tooltiptext">Defines the type of mini-game used in the module's Adventure Mode and the way traited eggs are obtained. Also defines the bonuses for power.</span>
+                            <span class="attribute-label tooltip">Traited Egg Rule:
+                                <span class="tooltiptext">How this device grants a Traited Egg &mdash; a chance roll on Stage V and up, a win-ratio threshold, a timer since the last evolution, or outliving the pet's lifespan.</span>
                             </span>
-                            <span class="attribute-value">#MODULERULESET</span>
+                            <span class="attribute-value">#MODULETRAITEDEGGRULE</span>
                         </li>
                         <li class="attribute-item">
+                            <span class="attribute-label tooltip">Power Bonus Rule:
+                                <span class="tooltiptext">Where battle power above the species base comes from &mdash; full Strength Hearts paying a per-stage table, a flat amount per heart (to +16), the Digimon Mini's Strength bands (to +15), the level steps, the original Pendulum's effort stat, or Vital Bracelet stars.</span>
+                            </span>
+                            <span class="attribute-value">#MODULEPOWERBONUSRULE</span>
+                        </li>
+                        <li class="attribute-item">
+                            <span class="attribute-label tooltip">Effort Power Tiers:
+                                <span class="tooltiptext">For the Effort Tiers rule: the power a form's training adds, by stage and effort (one a training, reset on evolving).</span>
+                            </span>
+                            <span class="attribute-value #MODULEEFFORTPOWERTIERSCLASS">#MODULEEFFORTPOWERTIERS</span>
+                        </li>
+                                                <li class="attribute-item">
+                            <span class="attribute-label tooltip">Training Strength Gain:
+                                <span class="tooltiptext">Strength given at each training outcome &mdash; Bad, Good, Great, Excellent. "full" means the meter is filled outright.</span>
+                            </span>
+                            <span class="attribute-value">#MODULETRAININGSTRENGTHGAIN</span>
+                        </li>
+                        <li class="attribute-item">
+                            <span class="attribute-label tooltip">Training Weight Loss:
+                                <span class="tooltiptext">Weight shed at each training outcome &mdash; Bad, Good, Great, Excellent.</span>
+                            </span>
+                            <span class="attribute-value">#MODULETRAININGWEIGHTLOSS</span>
+                        </li>
+                        <li class="attribute-item">
+                            <span class="attribute-label tooltip">Training Effort Gain:
+                                <span class="tooltiptext">Effort given at each training outcome. Most devices credit a failed training; the original Pendulum only credits a successful one.</span>
+                            </span>
+                            <span class="attribute-value">#MODULETRAININGEFFORTGAIN</span>
+                        </li>
+<li class="attribute-item">
                             <span class="attribute-label tooltip">Traited Egg Starting Level:
                                 <span class="tooltiptext">Initial level for pets hatched from traited eggs. Higher levels provide stat bonuses including increased HP, power, and attack values.</span>
                             </span>
@@ -150,6 +180,18 @@
                             <span class="attribute-value #MODULECOUNTEVOLUTIONWHILESLEEPINGCLASS">#MODULECOUNTEVOLUTIONWHILESLEEPING</span>
                         </li>
                         <li class="attribute-item">
+                            <span class="attribute-label tooltip">Evolution Win Ratio Chance:
+                                <span class="tooltiptext">The chance a route with a win-ratio criterion is taken, by the pet's win ratio: the row with the highest ratio at or below it applies.</span>
+                            </span>
+                            <span class="attribute-value">#MODULEEVOLUTIONWINRATIOCHANCE</span>
+                        </li>
+                        <li class="attribute-item">
+                            <span class="attribute-label tooltip">Double Needs After Failed Evolution:
+                                <span class="tooltiptext">A pet with a win-rate route whose evolution timer took no route never evolves on the timer again. With this on, it then drains hunger and strength and poops twice as fast, and so at Stage VI+ after 48 hours.</span>
+                            </span>
+                            <span class="attribute-value #MODULEFAILEDEVOLUTIONDOUBLENEEDSCLASS">#MODULEFAILEDEVOLUTIONDOUBLENEEDS</span>
+                        </li>
+                        <li class="attribute-item">
                             <span class="attribute-label tooltip">Reverse Attack Frames:
                                 <span class="tooltiptext">Swaps attack animation frames (ATK1↔ATK2, TRAIN1↔TRAIN2) during sprite loading. Used for visual variety or correcting animation sequences in sprite sets.</span>
                             </span>
@@ -173,42 +215,6 @@
                                 <span class="tooltiptext">The battle protocol is used to simulate a real device while connecting with non Omnipet devices. When set, Omnipet will emulate the selected device's communication protocol during battles.</span>
                             </span>
                             <span class="attribute-value #MODULEBATTLEPROTOCOLCLASS">#MODULEBATTLEPROTOCOL</span>
-                        </li>
-                        <li class="attribute-item">
-                            <span class="attribute-label tooltip">Effort Gain:
-                                <span class="tooltiptext">Effort points gained per training session. At 16+ effort, pets gain significant power bonuses. Critical for unlocking evolution paths.</span>
-                            </span>
-                            <span class="attribute-value #MODULETRAININGEFFORTGAINCLASS">#MODULETRAININGEFFORTGAIN</span>
-                        </li>
-                        <li class="attribute-item">
-                            <span class="attribute-label tooltip">Strength Win:
-                                <span class="tooltiptext">Strength increase from winning training sessions. Higher values accelerate pet strengthening.</span>
-                            </span>
-                            <span class="attribute-value #MODULETRAININGSTRENGTHGAINWINCLASS">#MODULETRAININGSTRENGTHGAINWIN</span>
-                        </li>
-                        <li class="attribute-item">
-                            <span class="attribute-label tooltip">Strength Lose:
-                                <span class="tooltiptext">Strength increase from training sessions when losing. Usually less than winning gain. Helps maintain strength levels even when training performance is poor.</span>
-                            </span>
-                            <span class="attribute-value #MODULETRAININGSTRENGTHGAINLOSECLASS">#MODULETRAININGSTRENGTHGAINLOSE</span>
-                        </li>
-                        <li class="attribute-item">
-                            <span class="attribute-label tooltip">Strength Multiplier:
-                                <span class="tooltiptext">Multiplier applied to strength gains from training based on performance. Higher performance in training yields extra strength points.</span>
-                            </span>
-                            <span class="attribute-value #MODULETRAININGSTRENGMULTIPLIERCLASS">#MODULETRAININGSTRENGMULTIPLIER</span>
-                        </li>
-                        <li class="attribute-item">
-                            <span class="attribute-label tooltip">Weight Win:
-                                <span class="tooltiptext">Weight loss when winning training. Helps manage pet weight and body condition. High weight can make a pet sick.</span>
-                            </span>
-                            <span class="attribute-value #MODULETRAININGWEIGHTWINCLASS">#MODULETRAININGWEIGHTWIN</span>
-                        </li>
-                        <li class="attribute-item">
-                            <span class="attribute-label tooltip">Weight Lose:
-                                <span class="tooltiptext">Weight loss when losing training. Usually less than winning loss. Provides alternative weight management even when training performance is poor.</span>
-                            </span>
-                            <span class="attribute-value #MODULETRAININGWEIGHTLOSECLASS">#MODULETRAININGWEIGHTLOSE</span>
                         </li>
                     </ul>
                 </div>
@@ -242,6 +248,66 @@
                             <span class="attribute-value #MODULEBATTLECOSTAMOUNTCLASS">#MODULEBATTLECOSTAMOUNT</span>
                         </li>
                         <li class="attribute-item">
+                            <span class="attribute-label tooltip">Battle Weight Loss:
+                                <span class="tooltiptext">Weight in grams the pet loses after every battle, on top of the battle cost. 0 disables it. The original Digital Monster loses 4g per battle.</span>
+                            </span>
+                            <span class="attribute-value #MODULEBATTLEWEIGHTLOSSCLASS">#MODULEBATTLEWEIGHTLOSS</span>
+                        </li>
+                        <li class="attribute-item">
+                            <span class="attribute-label tooltip">Training Costs As Battle:
+                                <span class="tooltiptext">Every training costs the battle cost above (without the battle weight loss), and a pet that could not pay for a battle cannot train. The Digivice iC spends one hunger heart a battle or a training.</span>
+                            </span>
+                            <span class="attribute-value #MODULETRAININGUSESBATTLECOSTCLASS">#MODULETRAININGUSESBATTLECOST</span>
+                        </li>
+                        <li class="attribute-item">
+                            <span class="attribute-label tooltip">Battle Item Use:
+                                <span class="tooltiptext">When battle items (weapons, chips, disks) are used, from a list before the battle. Area: at the start of an adventure battle, lasting the item's boost time (the Digital Monster X's chips last the area). Every round: before each round, lasting that round (the Digivice iC's coliseum weapons).</span>
+                            </span>
+                            <span class="attribute-value">#MODULEBATTLEITEMUSE</span>
+                        </li>
+                        <li class="attribute-item">
+                            <span class="attribute-label tooltip">Jogress Cost:
+                                <span class="tooltiptext">What a Jogress costs the pets that take part.</span>
+                            </span>
+                            <span class="attribute-value #MODULEJOGRESSCOSTCLASS">#MODULEJOGRESSCOST</span>
+                        </li>
+                        <li class="attribute-item">
+                            <span class="attribute-label tooltip">Keep Battle Counts On Evolution:
+                                <span class="tooltiptext">Keeps the battle record (battles, wins, Event Communications) across an evolution instead of clearing it.</span>
+                            </span>
+                            <span class="attribute-value #MODULEBATTLEKEEPCOUNTSCLASS">#MODULEBATTLEKEEPCOUNTS</span>
+                        </li>
+                        <li class="attribute-item">
+                            <span class="attribute-label tooltip">Event Communication:
+                                <span class="tooltiptext">The module has Event Communications (a connection that counts toward evolutions, as the Digimon Twin's).</span>
+                            </span>
+                            <span class="attribute-value #MODULEEVENTCOMMUNICATIONCLASS">#MODULEEVENTCOMMUNICATION</span>
+                        </li>
+                        <li class="attribute-item">
+                            <span class="attribute-label tooltip">Event Communication Outcomes:
+                                <span class="tooltiptext">What an Event Communication can give, with the chance of each. Rows marked different versions need two pets of different versions.</span>
+                            </span>
+                            <span class="attribute-value #MODULEEVENTOUTCOMESCLASS">#MODULEEVENTOUTCOMES</span>
+                        </li>
+                        <li class="attribute-item">
+                            <span class="attribute-label tooltip">Attribute Advantage As Power:
+                                <span class="tooltiptext">The attribute advantage is added to Power before the hit rate is worked out, instead of to the hit rate (the Digital Monster X: +32 Power).</span>
+                            </span>
+                            <span class="attribute-value #MODULEBATTLEADVANTAGEPOWERCLASS">#MODULEBATTLEADVANTAGEPOWER</span>
+                        </li>
+                        <li class="attribute-item">
+                            <span class="attribute-label tooltip">Battle Panic Rate:
+                                <span class="tooltiptext">Percent chance that taking a hit leaves the pet in Panic until the player mashes out of it (the Digimon Twin). 0 disables it.</span>
+                            </span>
+                            <span class="attribute-value #MODULEBATTLEPANICRATECLASS">#MODULEBATTLEPANICRATE</span>
+                        </li>
+                        <li class="attribute-item">
+                            <span class="attribute-label tooltip">Battle Panic Attribute Bonus:
+                                <span class="tooltiptext">Percentage points a favourable attribute lowers the Panic rate by, an unfavourable one raises it.</span>
+                            </span>
+                            <span class="attribute-value #MODULEBATTLEPANICBONUSCLASS">#MODULEBATTLEPANICBONUS</span>
+                        </li>
+                        <li class="attribute-item">
                             <span class="attribute-label tooltip">Base Sick Chance Win:
                                 <span class="tooltiptext">Base percentage chance of getting sick after winning a battle. Modified by protein overdose and disturbance penalties. Minimum 5%, maximum 50%.</span>
                             </span>
@@ -254,8 +320,14 @@
                             <span class="attribute-value #MODULEBATTLEBASESICKCHANCELOSECLASS">#MODULEBATTLEBASESICKCHANCELOSE</span>
                         </li>
                         <li class="attribute-item">
+                            <span class="attribute-label tooltip">Injury Chance Step:
+                                <span class="tooltiptext">Points a form's injury chance rises after each lost battle and falls after each won one (the Digivice iC: 1).</span>
+                            </span>
+                            <span class="attribute-value #MODULEINJURYCHANCESTEPCLASS">#MODULEINJURYCHANCESTEP</span>
+                        </li>
+                        <li class="attribute-item">
                             <span class="attribute-label tooltip">Attribute Advantage:
-                                <span class="tooltiptext">Percentage advantage when pet's attribute matches favorably against enemy (Data > Virus > Vaccine > Data). Applied as damage multiplier in battle calculations.</span>
+                                <span class="tooltiptext">Percentage points added to the hit rate of the Digimon whose attribute has the advantage (Vaccine > Virus > Data > Vaccine) and taken from the other's, or added to Power where the module says so.</span>
                             </span>
                             <span class="attribute-value #MODULEBATTLEATTRIBUTEADVANTAGECLASS">#MODULEBATTLEATTRIBUTEADVANTAGE</span>
                         </li>
@@ -386,6 +458,48 @@
                             </span>
                             <span class="attribute-value #MODULECARECANBATTLEWHILESICKCLASS">#MODULECARECANBATTLEWHILESICK</span>
                         </li>
+                        <li class="attribute-item">
+                            <span class="attribute-label tooltip">Can Battle While Injured:
+                                <span class="tooltiptext">When enabled, the pet can battle even while injured (Skull). When disabled, battling is blocked until the injury is healed.</span>
+                            </span>
+                            <span class="attribute-value #MODULECARECANBATTLEWHILEINJUREDCLASS">#MODULECARECANBATTLEWHILEINJURED</span>
+                        </li>
+                        <li class="attribute-item">
+                            <span class="attribute-label tooltip">Allow Below Min Weight:
+                                <span class="tooltiptext">When enabled, weight losses can take a pet below its species' Min Weight, down to 1. When disabled, Min Weight is the floor.</span>
+                            </span>
+                            <span class="attribute-value #MODULECAREALLOWBELOWMINWEIGHTCLASS">#MODULECAREALLOWBELOWMINWEIGHT</span>
+                        </li>
+                        <li class="attribute-item">
+                            <span class="attribute-label tooltip">Needs Drain While Sleeping:
+                                <span class="tooltiptext">Hunger and strength keep draining while the pet sleeps.</span>
+                            </span>
+                            <span class="attribute-value #MODULECARENEEDSDECAYSLEEPINGCLASS">#MODULECARENEEDSDECAYSLEEPING</span>
+                        </li>
+                        <li class="attribute-item">
+                            <span class="attribute-label tooltip">Can Train While Sick:
+                                <span class="tooltiptext">A sick pet may still train (battling while sick is its own setting).</span>
+                            </span>
+                            <span class="attribute-value #MODULECARECANTRAINSICKCLASS">#MODULECARECANTRAINSICK</span>
+                        </li>
+                        <li class="attribute-item">
+                            <span class="attribute-label tooltip">Disturbance Sickness Count:
+                                <span class="tooltiptext">Every this many sleep disturbances the pet falls sick. 0 disables it.</span>
+                            </span>
+                            <span class="attribute-value #MODULECAREDISTURBANCESICKNESSCOUNTCLASS">#MODULECAREDISTURBANCESICKNESSCOUNT</span>
+                        </li>
+                        <li class="attribute-item">
+                            <span class="attribute-label tooltip">Disturbance Sickness Effect:
+                                <span class="tooltiptext">The sickness those disturbances bring: Dots, Skull or Nothing.</span>
+                            </span>
+                            <span class="attribute-value #MODULECAREDISTURBANCESICKNESSEFFECTCLASS">#MODULECAREDISTURBANCESICKNESSEFFECT</span>
+                        </li>
+                        <li class="attribute-item">
+                            <span class="attribute-label tooltip">Poop Mistake Time:
+                                <span class="tooltiptext">Minutes a poop may stay uncleaned before it costs a care mistake and a point of virus. 0: never.</span>
+                            </span>
+                            <span class="attribute-value #MODULECAREPOOPMISTAKETIMECLASS">#MODULECAREPOOPMISTAKETIME</span>
+                        </li>
                     </ul>
                 </div>
 
@@ -424,6 +538,12 @@
                             <span class="attribute-value #MODULECAREPROTEINOVERDOSEMAXCLASS">#MODULECAREPROTEINOVERDOSEMAX</span>
                         </li>
                         <li class="attribute-item">
+                            <span class="attribute-label tooltip">Strength Max:
+                                <span class="tooltiptext">The most Strength a pet holds, whatever its stomach. Protein past it is still eaten and still adds weight. 0: the stomach is the cap.</span>
+                            </span>
+                            <span class="attribute-value #MODULECARESTRENGTHMAXCLASS">#MODULECARESTRENGTHMAX</span>
+                        </li>
+                        <li class="attribute-item">
                             <span class="attribute-label tooltip">Protein Penalty:
                                 <span class="tooltiptext">Determines the amount of each penalty for Protein Overdose in percent. Affects battle sick chance.</span>
                             </span>
@@ -450,9 +570,15 @@
                     <ul class="attribute-list">
                         <li class="attribute-item">
                             <span class="attribute-label tooltip">Max Injuries:
-                                <span class="tooltiptext">Maximum injuries before death. Injuries are gained from sickness, poop neglect, and battle losses.</span>
+                                <span class="tooltiptext">Injuries (Skull) in one form that kill: battles and the Skull causes.</span>
                             </span>
                             <span class="attribute-value #MODULEDEATHMAXINJURIESCLASS">#MODULEDEATHMAXINJURIES</span>
+                        </li>
+                        <li class="attribute-item">
+                            <span class="attribute-label tooltip">Max Sicknesses:
+                                <span class="tooltiptext">Sicknesses (Dots) in one form that kill, counted apart from injuries.</span>
+                            </span>
+                            <span class="attribute-value #MODULEDEATHMAXSICKNESSESCLASS">#MODULEDEATHMAXSICKNESSES</span>
                         </li>
                         <li class="attribute-item">
                             <span class="attribute-label tooltip">Care Mistake:
@@ -462,9 +588,15 @@
                         </li>
                         <li class="attribute-item">
                             <span class="attribute-label tooltip">Sick Timer:
-                                <span class="tooltiptext">Minutes of continuous sickness before death. Timer only counts while sick status is active.</span>
+                                <span class="tooltiptext">Minutes a sickness (Dots) may go untreated, awake, before the pet dies.</span>
                             </span>
                             <span class="attribute-value #MODULEDEATHSICKTIMERCLASS">#MODULEDEATHSICKTIMER</span>
+                        </li>
+                        <li class="attribute-item">
+                            <span class="attribute-label tooltip">Injury Timer:
+                                <span class="tooltiptext">Minutes an injury (Skull) may go untreated, awake, before the pet dies.</span>
+                            </span>
+                            <span class="attribute-value #MODULEDEATHINJURYTIMERCLASS">#MODULEDEATHINJURYTIMER</span>
                         </li>
                         <li class="attribute-item">
                             <span class="attribute-label tooltip">Hunger Timer:
@@ -477,6 +609,12 @@
                                 <span class="tooltiptext">Number of hunger depletion cycles before death. Each cycle occurs when hunger reaches 0 and isn't refilled.</span>
                             </span>
                             <span class="attribute-value #MODULEDEATHSTARVATIONCOUNTCLASS">#MODULEDEATHSTARVATIONCOUNT</span>
+                        </li>
+                        <li class="attribute-item">
+                            <span class="attribute-label tooltip">Debilitation Count:
+                                <span class="tooltiptext">Strength depletion cycles with the meter empty before death; filling the Strength meter completely resets it (the Xros Wars Color: 18). 0 disables it.</span>
+                            </span>
+                            <span class="attribute-value #MODULEDEATHDEBILITATIONCOUNTCLASS">#MODULEDEATHDEBILITATIONCOUNT</span>
                         </li>
                         <li class="attribute-item">
                             <span class="attribute-label tooltip">Strength Timer:
@@ -497,20 +635,38 @@
                             <span class="attribute-value #MODULEDEATHSTAGE67MISTAKECLASS">#MODULEDEATHSTAGE67MISTAKE</span>
                         </li>
                         <li class="attribute-item">
-                            <span class="attribute-label tooltip">Save by B Press:
-                                <span class="tooltiptext">Enables death prevention by B button press. Gives 1 minute window to save pet from death conditions.</span>
+                            <span class="attribute-label tooltip">Death Save By:
+                                <span class="tooltiptext">How a dying pet can be saved: B presses, shakes, or Nothing (it dies).</span>
                             </span>
-                            <span class="attribute-value #MODULEDEATHSAVEBYBPRESSCLASS">#MODULEDEATHSAVEBYBPRESS</span>
+                            <span class="attribute-value #MODULEDEATHSAVEBYCLASS">#MODULEDEATHSAVEBY</span>
                         </li>
                         <li class="attribute-item">
-                            <span class="attribute-label tooltip">Save by Shake:
-                                <span class="tooltiptext">Enables death prevention by device shaking. Gives 1 minute window to save pet through physical interaction.</span>
+                            <span class="attribute-label tooltip">Death Save Amount:
+                                <span class="tooltiptext">Presses or shakes the save needs.</span>
                             </span>
-                            <span class="attribute-value #MODULEDEATHSAVEBYSHAKECLASS">#MODULEDEATHSAVEBYSHAKE</span>
+                            <span class="attribute-value #MODULEDEATHSAVEAMOUNTCLASS">#MODULEDEATHSAVEAMOUNT</span>
+                        </li>
+                        <li class="attribute-item">
+                            <span class="attribute-label tooltip">Death Save Time:
+                                <span class="tooltiptext">Seconds to make them in; out of time, the pet dies.</span>
+                            </span>
+                            <span class="attribute-value">#MODULEDEATHSAVESECONDS</span>
+                        </li>
+                        <li class="attribute-item">
+                            <span class="attribute-label tooltip">Death Save Chance:
+                                <span class="tooltiptext">Chance (%) the pet lives once they are made.</span>
+                            </span>
+                            <span class="attribute-value">#MODULEDEATHSAVECHANCE</span>
+                        </li>
+                        <li class="attribute-item">
+                            <span class="attribute-label tooltip">Lifespan Rule:
+                                <span class="tooltiptext">How a pet's life ends: None (it lives on), Activity Time (a form that cannot evolve 2 hours after its evolution time goes near-death), Old Age (it dies Death by Old Age days into its life) or Age 5 (from 5 days old Hunger and poop come twice as fast, and 16 care mistakes in one form kill).</span>
+                            </span>
+                            <span class="attribute-value #MODULELIFESPANRULECLASS">#MODULELIFESPANRULE</span>
                         </li>
                         <li class="attribute-item">
                             <span class="attribute-label tooltip">Death by Old Age:
-                                <span class="tooltiptext">Days of pet's life before death from old age. When set to 0, old age death is disabled.</span>
+                                <span class="tooltiptext">The Old Age rule's days: the pet dies this many days into its life, counted asleep and awake.</span>
                             </span>
                             <span class="attribute-value #MODULEDEATHOLDAGECLASS">#MODULEDEATHOLDAGE</span>
                         </li>
@@ -554,15 +710,112 @@
                     </ul>
                 </div>
 
+                <!-- Misc - Reliability Settings -->
+                <div class="attribute-section">
+                    <h2>Reliability Settings</h2>
+                    <ul class="attribute-list">
+                        <li class="attribute-item">
+                            <span class="attribute-label tooltip">Reliability Base:
+                                <span class="tooltiptext">Starting Reliability for a new first-generation pet. 0 disables the stat.</span>
+                            </span>
+                            <span class="attribute-value #MODULERELIABILITYBASECLASS">#MODULERELIABILITYBASE</span>
+                        </li>
+                        <li class="attribute-item">
+                            <span class="attribute-label tooltip">Becoming Full:
+                                <span class="tooltiptext">Reliability change when feeding makes the pet reach maximum Hunger.</span>
+                            </span>
+                            <span class="attribute-value #MODULERELIABILITYBECOMINGFULLCLASS">#MODULERELIABILITYBECOMINGFULL</span>
+                        </li>
+                        <li class="attribute-item">
+                            <span class="attribute-label tooltip">Answering Call:
+                                <span class="tooltiptext">Reliability change when the player answers a pet call.</span>
+                            </span>
+                            <span class="attribute-value #MODULERELIABILITYANSWERINGCALLCLASS">#MODULERELIABILITYANSWERINGCALL</span>
+                        </li>
+                        <li class="attribute-item">
+                            <span class="attribute-label tooltip">Ignoring Call:
+                                <span class="tooltiptext">Reliability change when a pet call expires unanswered.</span>
+                            </span>
+                            <span class="attribute-value #MODULERELIABILITYIGNORINGCALLCLASS">#MODULERELIABILITYIGNORINGCALL</span>
+                        </li>
+                        <li class="attribute-item">
+                            <span class="attribute-label tooltip">Minigame Success:
+                                <span class="tooltiptext">Reliability change when a minigame reports a successful result.</span>
+                            </span>
+                            <span class="attribute-value #MODULERELIABILITYMINIGAMESUCCESSCLASS">#MODULERELIABILITYMINIGAMESUCCESS</span>
+                        </li>
+                        <li class="attribute-item">
+                            <span class="attribute-label tooltip">Two Poops:
+                                <span class="tooltiptext">Reliability change for every two accumulated, uncleaned poops.</span>
+                            </span>
+                            <span class="attribute-value #MODULERELIABILITYTWOPOOPSCLASS">#MODULERELIABILITYTWOPOOPS</span>
+                        </li>
+                        <li class="attribute-item">
+                            <span class="attribute-label tooltip">Sickness or Injury:
+                                <span class="tooltiptext">Reliability change whenever sickness or injury begins.</span>
+                            </span>
+                            <span class="attribute-value #MODULERELIABILITYSICKNESSORINJURYCLASS">#MODULERELIABILITYSICKNESSORINJURY</span>
+                        </li>
+                        <li class="attribute-item">
+                            <span class="attribute-label tooltip">Battle Win:
+                                <span class="tooltiptext">Reliability change after each battle victory.</span>
+                            </span>
+                            <span class="attribute-value #MODULERELIABILITYBATTLEWINCLASS">#MODULERELIABILITYBATTLEWIN</span>
+                        </li>
+                        <li class="attribute-item">
+                            <span class="attribute-label tooltip">Hourly:
+                                <span class="tooltiptext">Reliability change every 60 elapsed minutes.</span>
+                            </span>
+                            <span class="attribute-value #MODULERELIABILITYHOURLYCLASS">#MODULERELIABILITYHOURLY</span>
+                        </li>
+                    </ul>
+                </div>
+
                 <!-- Misc - G-Cell Settings -->
                 <div class="attribute-section">
                     <h2>G-Cell Settings</h2>
                     <ul class="attribute-list">
                         <li class="attribute-item">
-                            <span class="attribute-label tooltip">Use G-Cells:
-                                <span class="tooltiptext">Enables the G-Cell evolution system. G-Cells fluctuate based on care, training, battles, and protein feeding.</span>
+                            <span class="attribute-label tooltip">G-Cell Style:
+                                <span class="tooltiptext">The G-Cell evolution system: Disabled; DMGZ, one 0-472 point meter paid by flat values; or PENGZ, 14 cells sized by stage (Red from 8) paid by stage.</span>
                             </span>
                             <span class="attribute-value #MODULEUSEGCELLSCLASS">#MODULEUSEGCELLS</span>
+                        </li>
+                        <li class="attribute-item">
+                            <span class="attribute-label tooltip">Points Per Cell (PENGZ):
+                                <span class="tooltiptext">Points each of the 14 cells holds, by stage (Stage 0 to VI+).</span>
+                            </span>
+                            <span class="attribute-value #MODULEGCELLPOINTSPERCELLCLASS">#MODULEGCELLPOINTSPERCELL</span>
+                        </li>
+                        <li class="attribute-item">
+                            <span class="attribute-label tooltip">Care Mistake (PENGZ):
+                                <span class="tooltiptext">Points a care mistake or the empty-strength call costs, by stage.</span>
+                            </span>
+                            <span class="attribute-value #MODULEGCELLCAREMISTAKEBYSTAGECLASS">#MODULEGCELLCAREMISTAKEBYSTAGE</span>
+                        </li>
+                        <li class="attribute-item">
+                            <span class="attribute-label tooltip">Battle Win / Loss (PENGZ):
+                                <span class="tooltiptext">Points a won / lost battle pays, by stage.</span>
+                            </span>
+                            <span class="attribute-value #MODULEGCELLBATTLEBYSTAGECLASS">#MODULEGCELLBATTLEBYSTAGE</span>
+                        </li>
+                        <li class="attribute-item">
+                            <span class="attribute-label tooltip">Random Encounter Win / Loss (PENGZ):
+                                <span class="tooltiptext">Points a won / lost random encounter pays, by stage.</span>
+                            </span>
+                            <span class="attribute-value #MODULEGCELLENCOUNTERBYSTAGECLASS">#MODULEGCELLENCOUNTERBYSTAGE</span>
+                        </li>
+                        <li class="attribute-item">
+                            <span class="attribute-label tooltip">Training Gain (PENGZ):
+                                <span class="tooltiptext">Points a training pays by its grade (Bad, Good, Great, Excellent); with Anguirus on the second line.</span>
+                            </span>
+                            <span class="attribute-value #MODULEGCELLTRAININGGAINCLASS">#MODULEGCELLTRAININGGAIN</span>
+                        </li>
+                        <li class="attribute-item">
+                            <span class="attribute-label tooltip">Other Device Win / Loss (PENGZ):
+                                <span class="tooltiptext">Points a versus against another module's pet pays.</span>
+                            </span>
+                            <span class="attribute-value #MODULEGCELLOTHERDEVICECLASS">#MODULEGCELLOTHERDEVICE</span>
                         </li>
                         <li class="attribute-item">
                             <span class="attribute-label tooltip">Random Encounter Win:

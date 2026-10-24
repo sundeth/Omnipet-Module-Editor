@@ -1,4 +1,5 @@
-using OmnipetModuleEditor.Controls;
+﻿using OmnipetModuleEditor.Controls;
+using OmnipetModuleEditor.DigimonSync;
 using OmnipetModuleEditor.Models;
 using OmnipetModuleEditor.Utils;
 using System;
@@ -9,6 +10,7 @@ using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Text.Json;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 
 namespace OmnipetModuleEditor.Tabs
@@ -16,7 +18,7 @@ namespace OmnipetModuleEditor.Tabs
     /// <summary>
     /// Tab for managing and editing pets in the module.
     /// </summary>
-    public partial class PetTab : UserControl
+    public partial class PetTab : UserControl, IListClipboardTarget
     {
         // Fields - Changed to internal so PetEditPanel can access them
         internal List<Pet> pets;
@@ -417,7 +419,6 @@ namespace OmnipetModuleEditor.Tabs
         {
             if (copiedPet == null) return;
             var newPet = PetUtils.ClonePet(copiedPet);
-            newPet.Name += Properties.Resources.PetTab_CopySuffix ?? " Copy";
             pets.Add(newPet);
             SortPets();
             var panel = PopulatePetPanelAndReturnPanel(newPet);
@@ -426,23 +427,149 @@ namespace OmnipetModuleEditor.Tabs
             Save();
         }
 
-        private void BtnAdd_Click(object sender, EventArgs e)
+        /// <summary>Ctrl+C — copy the selected pet into the paste buffer.</summary>
+        public void CopySelection() => BtnCopy_Click(this, EventArgs.Empty);
+
+        /// <summary>Ctrl+V — paste a duplicate of the copied pet.</summary>
+        public void PasteClipboard() => BtnPaste_Click(this, EventArgs.Empty);
+
+        /// <summary>Edit menu: open the evolutions editor for this module's pets.</summary>
+        public void OpenEvolutionsEditor()
         {
-            using (var dlg = new StageSelectForm())
+            var dlg = new EvolutionsEditorForm(pets, modulePath, module);
+            dlg.ShowDialog(this);
+        }
+
+        /// <summary>
+        /// Tools menu: assign the Index field to every pet following the order they
+        /// currently appear in the pet list. Stage 0 (egg) pets are always index -1;
+        /// for all other pets the index restarts at 0 for each version and increments
+        /// in list order (version 1 → 0,1,2,…, then version 2 → 0,1,2,…).
+        /// </summary>
+        public void GenerateIndexes()
+        {
+            if (pets == null || pets.Count == 0)
+                return;
+
+            // Use the same ordering shown in the pet list panel.
+            var ordered = GetSortedPets();
+            var perVersionCounter = new Dictionary<int, int>();
+
+            foreach (var pet in ordered)
             {
-                if (dlg.ShowDialog(this) == DialogResult.OK && dlg.SelectedStage >= 0 && dlg.SelectedStage <= 8)
+                if (pet.Stage == 0)
                 {
-                    var template = OmnipetModuleEditor.Models.PetTemplates.ByStage[dlg.SelectedStage];
-                    var newPet = PetUtils.ClonePet(template);
-                    newPet.Name = Properties.Resources.PetTab_NewPetName ?? "New Pet";
-                    newPet.Stage = dlg.SelectedStage;
-                    pets.Add(newPet);
-                    SortPets();
-                    var panel = PopulatePetPanelAndReturnPanel(newPet);
-                    if (panel != null)
-                        SelectPetPanel(panel);
-                    Save();
+                    pet.Index = -1;
+                    continue;
                 }
+
+                int next = perVersionCounter.TryGetValue(pet.Version, out int c) ? c : 0;
+                pet.Index = next;
+                perVersionCounter[pet.Version] = next + 1;
+            }
+
+            SortPets();
+            PopulatePetPanel();
+            Save();
+        }
+
+        private async void BtnAdd_Click(object sender, EventArgs e)
+        {
+            // Try to load the Digimon catalogue so the Add dialog can offer
+            // database-driven options; fall back to Custom-only when offline.
+            List<DigimonRecord> records = null;
+            Dictionary<string, int> levelMap = null;
+            this.Cursor = Cursors.WaitCursor;
+            try
+            {
+                records = await DigimonDbClient.GetAllAsync();
+                levelMap = await DigimonDbClient.GetLevelNameToIdAsync();
+            }
+            catch
+            {
+                records = null;
+                levelMap = null;
+            }
+            finally
+            {
+                this.Cursor = Cursors.Default;
+            }
+
+            using (var dlg = new AddPetForm(0, records, levelMap))
+            {
+                if (dlg.ShowDialog(this) != DialogResult.OK
+                    || dlg.SelectedStage < 0 || dlg.SelectedStage > 8)
+                    return;
+
+                int stage = dlg.SelectedStage;
+                var template = OmnipetModuleEditor.Models.PetTemplates.ByStage[stage];
+                var newPet = PetUtils.ClonePet(template);
+                newPet.Stage = stage;
+
+                var digimon = dlg.SelectedDigimon;
+                if (digimon == null)
+                {
+                    // "Custom" — keep the original blank-template behaviour.
+                    newPet.Name = Properties.Resources.PetTab_NewPetName ?? "New Pet";
+                }
+                else
+                {
+                    newPet.Name = digimon.NameEnglish
+                                  ?? (Properties.Resources.PetTab_NewPetName ?? "New Pet");
+                    if (digimon.MinWeight.HasValue)
+                        newPet.MinWeight = digimon.MinWeight.Value;
+                    newPet.Attribute = DigimonPetFactory.MapAttributeCode(digimon.Attributes);
+
+                    if (dlg.SelectedModule != null && digimon.ExtraData != null
+                        && digimon.ExtraData.TryGetValue(dlg.SelectedModule, out var extra))
+                    {
+                        // Import all of the module's extra-data into the pet,
+                        // then pull that module's custom sprite sheets in.
+                        newPet = DigimonPetFactory.WithExtraData(newPet, extra);
+                        await ImportModuleSpritesAsync(digimon.Id, dlg.SelectedModule, newPet.Name);
+                    }
+                }
+
+                pets.Add(newPet);
+                SortPets();
+                var panel = PopulatePetPanelAndReturnPanel(newPet);
+                if (panel != null)
+                    SelectPetPanel(panel);
+                Save();
+            }
+        }
+
+        /// <summary>
+        /// Download the source module's custom sprite sheets for a Digimon and
+        /// write them into this module's sprite folders under the pet's name.
+        /// Best-effort: formats with no custom sheet are simply skipped.
+        /// </summary>
+        private async Task ImportModuleSpritesAsync(string digimonId, string sourceModule, string petName)
+        {
+            var formats = new[]
+            {
+                ("color", "monsters"),
+                ("dot", "monsters_dot"),
+                ("hd", "monsters_hidef"),
+            };
+            string spriteName = SpriteUtils.GetSpriteName(petName, module?.NameFormat);
+            this.Cursor = Cursors.WaitCursor;
+            try
+            {
+                foreach (var fmt in formats)
+                {
+                    var bytes = await DigimonDbClient.DownloadModuleSheetAsync(digimonId, fmt.Item1, sourceModule);
+                    if (bytes == null || bytes.Length == 0)
+                        continue;
+                    var dir = Path.Combine(modulePath, fmt.Item2);
+                    Directory.CreateDirectory(dir);
+                    File.WriteAllBytes(Path.Combine(dir, spriteName + ".zip"), bytes);
+                }
+            }
+            catch { /* sprite import is best-effort */ }
+            finally
+            {
+                this.Cursor = Cursors.Default;
             }
         }
 
@@ -578,6 +705,27 @@ namespace OmnipetModuleEditor.Tabs
         }
 
         // Right panel (pet editing)
+        /// <summary>encounter_chances as "10/5/5" ("-" for a null entry).</summary>
+        private static string EncounterChancesText(int?[] chances)
+        {
+            if (chances == null) return "";
+            return string.Join("/", Array.ConvertAll(chances, c => c.HasValue ? c.Value.ToString() : "-"));
+        }
+
+        /// <summary>"10/5/5" back to encounter_chances; blank is null.</summary>
+        private static int?[] ParseEncounterChances(string text)
+        {
+            var words = (text ?? "").Split(new[] { '/', ',', ' ', ';' }, StringSplitOptions.RemoveEmptyEntries);
+            if (words.Length == 0) return null;
+            var chances = new int?[words.Length];
+            for (int i = 0; i < words.Length; i++)
+            {
+                int n;
+                chances[i] = int.TryParse(words[i], out n) ? Math.Max(0, Math.Min(100, n)) : (int?)null;
+            }
+            return chances;
+        }
+
         private class PetEditPanel : UserControl
         {
             // Remove old sprite-related fields that are now in PetSpritePanel
@@ -608,10 +756,19 @@ namespace OmnipetModuleEditor.Tabs
             public NumericUpDown NumStrengthLoss;
             public NumericUpDown NumHealDoses;
             public NumericUpDown NumPower;
+            public NumericUpDown NumRpm;
             public ComboBox CmbAttribute;
+            public ComboBox CmbDigisoul;
+            public NumericUpDown NumInjuryProbability;
+            public NumericUpDown NumEncounterTimeGroup;
+            public NumericUpDown NumEncounterOpponentGroup;
+            public TextBox TxtEncounterChances;
+        public ComboBox CmbPersonality;
+            public TextBox TxtTags;
             public NumericUpDown NumConditionHearts;
             public CheckBox ChkJogress;
             public NumericUpDown NumHp;
+            public ComboBox CmbAvailability;
 
             // VB-specific fields - NEW
             public NumericUpDown NumStar;
@@ -622,6 +779,17 @@ namespace OmnipetModuleEditor.Tabs
             private Button btnCancel;
 
             private Pet currentPet;
+
+            /// <summary>Explains what each pet stat does. Kept as a field so it
+            /// outlives InitializeComponent - a ToolTip that goes out of scope
+            /// stops showing.</summary>
+            private readonly ToolTip petTips = new ToolTip
+            {
+                AutoPopDelay = 20000,
+                InitialDelay = 300,
+                ReshowDelay = 200,
+                ShowAlways = true
+            };
 
             // Remove old spriteBoxes list - no longer needed
             // private List<Panel> spriteBoxes = new List<Panel>();
@@ -654,7 +822,21 @@ namespace OmnipetModuleEditor.Tabs
                     if (cmb.Items[i] is AtkComboItem item && item.Number == number)
                         return i;
                 }
+                // An id with no sprite in atk/ or the shared assets is listed
+                // (without a picture) rather than saved back as 0.
+                if (number != 0)
+                    return cmb.Items.Add(new AtkComboItem(number, null));
                 return 0;
+            }
+
+            /// <summary>Selects <paramref name="value"/>, adding it to the list
+            /// first when the list does not name it, so a value the form does
+            /// not offer is kept on save rather than replaced.</summary>
+            private static void SelectKeeping(ComboBox cmb, string value, string fallback)
+            {
+                if (!string.IsNullOrEmpty(value) && !cmb.Items.Contains(value))
+                    cmb.Items.Add(value);
+                cmb.SelectedItem = string.IsNullOrEmpty(value) ? fallback : value;
             }
 
             public void LoadPet(Pet pet)
@@ -673,7 +855,8 @@ namespace OmnipetModuleEditor.Tabs
                 }
                 else
                 {
-                    NumIndex.Value = Math.Max(NumIndex.Minimum, pet.Index ?? 0);
+                    // -1 shows "no index" and saves as none.
+                    NumIndex.Value = Math.Max(NumIndex.Minimum, pet.Index ?? -1);
                     NumIndex.Enabled = true;
                 }
                 
@@ -696,18 +879,37 @@ namespace OmnipetModuleEditor.Tabs
                 NumStomach.Value = Math.Max(NumStomach.Minimum, pet.Stomach);
                 NumHungerLoss.Value = Math.Max(NumHungerLoss.Minimum, pet.HungerLoss);
                 NumStrengthLoss.Value = Math.Max(NumStrengthLoss.Minimum, pet.StrengthLoss);
-                NumHealDoses.Value = Math.Max(NumHealDoses.Minimum, pet.HealDoses);
+                NumHealDoses.Value = Math.Max(NumHealDoses.Minimum, Math.Min(NumHealDoses.Maximum, pet.HealDoses));
                 NumPower.Value = Math.Max(NumPower.Minimum, pet.Power);
+                NumRpm.Value = Math.Max(NumRpm.Minimum,
+                    Math.Min(NumRpm.Maximum, pet.Rpm));
                 CmbAttribute.SelectedItem = pet.Attribute ?? "";
                 CmbAttribute.SelectedIndex = (int)PetUtils.JsonToAttributeEnum(pet.Attribute ?? "");
+                SelectKeeping(CmbDigisoul, pet.Digisoul, "");
+                if (CmbDigisoul.SelectedIndex < 0)
+                    CmbDigisoul.SelectedIndex = 0;
+                NumInjuryProbability.Value = Math.Min(
+                    NumInjuryProbability.Maximum,
+                    Math.Max(NumInjuryProbability.Minimum, pet.InjuryProbability));
+                NumEncounterTimeGroup.Value = Math.Min(NumEncounterTimeGroup.Maximum, pet.EncounterTimeGroup ?? -1);
+                NumEncounterOpponentGroup.Value = Math.Min(NumEncounterOpponentGroup.Maximum, pet.EncounterOpponentGroup ?? -1);
+                TxtEncounterChances.Text = EncounterChancesText(pet.EncounterChances);
+            SelectKeeping(CmbPersonality, pet.Personality, "Normal");
+            if (CmbPersonality.SelectedIndex < 0) CmbPersonality.SelectedIndex = 2;
+                TxtTags.Text = pet.Tags != null ? string.Join(", ", pet.Tags) : "";
                 NumConditionHearts.Value = Math.Max(NumConditionHearts.Minimum, pet.ConditionHearts);
-                ChkJogress.Checked = pet.JogressAvaliable;
+                ChkJogress.Checked = pet.JogressAvailable;
                 NumHp.Value = Math.Max(NumHp.Minimum, pet.Hp);
 
                 // VB-specific fields - NEW
                 NumStar.Value = Math.Max(NumStar.Minimum, pet.Star);
                 NumAttack.Value = Math.Max(NumAttack.Minimum, pet.Attack);
                 NumCriticalTurn.Value = Math.Max(NumCriticalTurn.Minimum, pet.CriticalTurn);
+
+                // Availability — null means Normal; a value the list does not
+                // name is kept.
+                SelectKeeping(CmbAvailability, pet.Availability, "Normal");
+                if (CmbAvailability.SelectedIndex < 0) CmbAvailability.SelectedIndex = 0;
             }
 
             // Helper to normalize time format
@@ -726,23 +928,30 @@ namespace OmnipetModuleEditor.Tabs
                 pet.Name = TxtName.Text;
                 pet.Stage = CmbStage.SelectedIndex;
                 
-                // Index: Stage 0 pets always have index -1 (or null)
+                // Index: Stage 0 pets always have index -1 (or none). What the
+                // record already says is kept, so saving a form changes only
+                // what was edited.
                 if (pet.Stage == 0)
                 {
-                    pet.Index = null;  // Stage 0 doesn't need index
+                    if (pet.Index.HasValue && pet.Index.Value != -1)
+                        pet.Index = -1;
                 }
                 else
                 {
-                    pet.Index = (int)NumIndex.Value;
+                    int index = (int)NumIndex.Value;
+                    // -1 is "no index": none stays none.
+                    pet.Index = index >= 0 ? index : (pet.Index < 0 ? pet.Index : (int?)null);
                 }
-                
+
                 pet.Version = (int)NumVersion.Value;
                 pet.Special = ChkSpecial.Checked;
-                pet.SpecialKey = TxtSpecialKey.Text;
+                string specialKey = TxtSpecialKey.Text;
+                pet.SpecialKey = specialKey.Length == 0 && pet.SpecialKey == null ? null : specialKey;
 
-                // Salva null se vazio, inválido ou igual a "  :"
-                pet.Sleeps = IsValidTime(TxtSleeps.Text) ? TxtSleeps.Text : null;
-                pet.Wakes = IsValidTime(TxtWakes.Text) ? TxtWakes.Text : null;
+                // Null when empty, invalid or "  :"; an empty string the record
+                // already had stays an empty string.
+                pet.Sleeps = IsValidTime(TxtSleeps.Text) ? TxtSleeps.Text : (pet.Sleeps == "" ? "" : null);
+                pet.Wakes = IsValidTime(TxtWakes.Text) ? TxtWakes.Text : (pet.Wakes == "" ? "" : null);
 
                 pet.AtkMain = (CmbAtkMain.SelectedItem as AtkComboItem)?.Number ?? 0;
                 pet.AtkAlt = (CmbAtkAlt.SelectedItem as AtkComboItem)?.Number ?? 0;
@@ -757,18 +966,41 @@ namespace OmnipetModuleEditor.Tabs
                 pet.StrengthLoss = (int)NumStrengthLoss.Value;
                 pet.HealDoses = (int)NumHealDoses.Value;
                 pet.Power = (int)NumPower.Value;
-                if (CmbAttribute.SelectedIndex >= 0)
-                    pet.Attribute = PetUtils.AttributeEnumToJson((AttributeEnum)CmbAttribute.SelectedIndex);
-                else
-                    pet.Attribute = "";
+                pet.Rpm = (int)NumRpm.Value;
+                // "Normal" is what an empty personality shows: it stays empty.
+                string personality = CmbPersonality.SelectedItem as string ?? "Normal";
+                if (!(personality == "Normal" && string.IsNullOrEmpty(pet.Personality)))
+                    pet.Personality = personality;
+                var tags = TxtTags.Text.Split(',').Select(t => t.Trim())
+                    .Where(t => t.Length > 0).Distinct().ToArray();
+                pet.Tags = tags.Length > 0 ? tags : null;
+                // Written only when changed: Free shows for an empty, absent or
+                // unknown attribute, and those stay as they are.
+                var attribute = CmbAttribute.SelectedIndex >= 0
+                    ? (AttributeEnum)CmbAttribute.SelectedIndex : AttributeEnum.FREE;
+                if (attribute != PetUtils.JsonToAttributeEnum(pet.Attribute ?? ""))
+                    pet.Attribute = PetUtils.AttributeEnumToJson(attribute);
+                string digisoul = CmbDigisoul.SelectedItem as string ?? "";
+                if (!(digisoul == "" && pet.Digisoul == null))
+                    pet.Digisoul = digisoul;
+                pet.InjuryProbability = (int)NumInjuryProbability.Value;
+                // -1 is "none" and stays out of the file.
+                pet.EncounterTimeGroup = NumEncounterTimeGroup.Value < 0 ? (int?)null : (int)NumEncounterTimeGroup.Value;
+                pet.EncounterOpponentGroup = NumEncounterOpponentGroup.Value < 0 ? (int?)null : (int)NumEncounterOpponentGroup.Value;
+                pet.EncounterChances = ParseEncounterChances(TxtEncounterChances.Text);
                 pet.ConditionHearts = (int)NumConditionHearts.Value;
-                pet.JogressAvaliable = ChkJogress.Checked;
+                pet.JogressAvailable = ChkJogress.Checked;
                 pet.Hp = (int)NumHp.Value;
 
                 // VB-specific fields - NEW
                 pet.Star = (int)NumStar.Value;
                 pet.Attack = (int)NumAttack.Value;
                 pet.CriticalTurn = (int)NumCriticalTurn.Value;
+
+                // Availability — "Normal" is the default and isn't saved
+                string avail = CmbAvailability.SelectedItem?.ToString();
+                if (!(avail == "Normal" && pet.Availability == "Normal"))
+                    pet.Availability = (string.IsNullOrEmpty(avail) || avail == "Normal") ? null : avail;
             }
 
             // Função auxiliar para validar hora no formato HH:mm
@@ -806,7 +1038,7 @@ namespace OmnipetModuleEditor.Tabs
                 fieldsPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 200F));
 
                 int row = 0, col = 0;
-                void AddField(string label, Control control)
+                void AddField(string label, Control control, string tip = null)
                 {
                     if (col >= 2)
                     {
@@ -832,6 +1064,12 @@ namespace OmnipetModuleEditor.Tabs
                     fieldsPanel.Controls.Add(lbl, col * 2, row);
                     fieldsPanel.Controls.Add(control, col * 2 + 1, row);
 
+                    if (!string.IsNullOrEmpty(tip))
+                    {
+                        petTips.SetToolTip(lbl, tip);
+                        petTips.SetToolTip(control, tip);
+                    }
+
                     col++;
                 }
 
@@ -841,12 +1079,37 @@ namespace OmnipetModuleEditor.Tabs
                 TxtSpecialKey = new TextBox(); TxtSpecialKey.Enabled = false;
                 ChkSpecial.CheckedChanged += (s, e) => TxtSpecialKey.Enabled = ChkSpecial.Checked;
                 CmbStage = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList };
-                CmbStage.Items.AddRange(Enum.GetNames(typeof(OmnipetModuleEditor.Models.StageEnum)));
+                CmbStage.Items.AddRange(OmnipetModuleEditor.Models.Stages.Names);
                 NumIndex = new NumericUpDown { Minimum = -1, Maximum = 9999, Value = 0 };  // NEW: Index field
                 NumVersion = new NumericUpDown { Minimum = 0, Value = 1 };
-                NumTime = new NumericUpDown { Minimum = 1, Value = 1, Maximum = 99999 };
-                CmbAttribute = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList };
+                // The minimums below are 0: a form must not raise a value the
+                // module already has (eggs have no timer, many forms lose no
+                // hunger or strength, eggs weigh 0).
+                NumTime = new NumericUpDown { Minimum = 0, Value = 1, Maximum = 99999 };
+                // Which round the special move fires on, and so which round
+            // earns +2 AP. Devices with no personality data use Normal.
+            CmbPersonality = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList };
+            CmbPersonality.Items.AddRange(new object[] {
+                "Stoic", "Active", "Normal", "Indoor", "Lazy" });
+            CmbPersonality.SelectedIndex = 2;
+                TxtTags = new TextBox();
+            CmbAttribute = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList };
                 CmbAttribute.Items.AddRange(Enum.GetNames(typeof(OmnipetModuleEditor.Models.AttributeEnum)));
+                CmbDigisoul = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList };
+                CmbDigisoul.Items.AddRange(new object[] {
+                    "", "Beast", "Bird", "Machine", "Water", "Dragon",
+                    "Insect", "Holy", "Dark"
+                });
+                CmbDigisoul.SelectedIndex = 0;
+                NumInjuryProbability = new NumericUpDown
+                {
+                    Minimum = 0,
+                    Maximum = 100,
+                    Value = 0
+                };
+                NumEncounterTimeGroup = new NumericUpDown { Minimum = -1, Maximum = 99, Value = -1 };
+                NumEncounterOpponentGroup = new NumericUpDown { Minimum = -1, Maximum = 99, Value = -1 };
+                TxtEncounterChances = new TextBox();
                 NumEnergy = new NumericUpDown { Minimum = 0, Value = 0 };
                 TxtSleeps = new MaskedTextBox { Mask = "00:00" };
                 CmbAtkMain = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList };
@@ -863,15 +1126,26 @@ namespace OmnipetModuleEditor.Tabs
                 CmbAtkAlt2.DrawItem += AtkCombo_DrawItem;
                 TxtWakes = new MaskedTextBox { Mask = "00:00" };
                 NumPower = new NumericUpDown { Minimum = 0, Value = 0, Maximum = 300 };
+                // 0 is "none stated", and the rates on record run 50-85;
+                // the ceiling is loose so an unread device can be recorded.
+                NumRpm = new NumericUpDown { Minimum = 0, Value = 0, Maximum = 999 };
                 NumHp = new NumericUpDown { Minimum = 0, Value = 0 };
-                NumHungerLoss = new NumericUpDown { Minimum = 2, Value = 4, Maximum = 99999 };
-                NumStomach = new NumericUpDown { Minimum = 2, Value = 4 };
-                NumStrengthLoss = new NumericUpDown { Minimum = 2, Value = 4, Maximum = 99999 };
-                NumMinWeight = new NumericUpDown { Minimum = 5, Value = 5 };
+                NumHungerLoss = new NumericUpDown { Minimum = 0, Value = 4, Maximum = 99999 };
+                NumStomach = new NumericUpDown { Minimum = 0, Value = 4 };
+                // Eggs (stage 0) can't eat, so default their stomach to 0 when
+                // the stage is set to egg.
+                CmbStage.SelectedIndexChanged += (s, e) =>
+                {
+                    if (CmbStage.SelectedIndex == 0)
+                        NumStomach.Value = 0;
+                };
+                NumStrengthLoss = new NumericUpDown { Minimum = 0, Value = 4, Maximum = 99999 };
+                NumMinWeight = new NumericUpDown { Minimum = 0, Value = 5 };
                 NumEvolWeight = new NumericUpDown { Minimum = 0, Value = 0, Maximum = 99 };
-                NumPoopTimer = new NumericUpDown { Minimum = 3, Value = 3, Maximum = 99999 };
+                NumPoopTimer = new NumericUpDown { Minimum = 0, Value = 3, Maximum = 99999 };
                 NumConditionHearts = new NumericUpDown { Minimum = 0, Value = 0 };
-                NumHealDoses = new NumericUpDown { Minimum = 1, Value = 1 };
+                // 0: a form that neither falls sick nor is injured (most Baby I).
+                NumHealDoses = new NumericUpDown { Minimum = 0, Value = 1 };
                 ChkJogress = new CheckBox();
 
                 // VB-specific fields
@@ -879,36 +1153,86 @@ namespace OmnipetModuleEditor.Tabs
                 NumAttack = new NumericUpDown { Minimum = 0, Value = 1, Maximum = 99 };
                 NumCriticalTurn = new NumericUpDown { Minimum = 0, Value = 0, Maximum = 99 };
 
+                CmbAvailability = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 110 };
+                CmbAvailability.Items.AddRange(new object[] { "Normal", "Unobtainable", "Friend" });
+                CmbAvailability.SelectedIndex = 0;
+
                 // Add fields - REORGANIZED: Attack and Critical Turn moved to second column
-                AddField("Name:", TxtName);
-                AddField("Special:", ChkSpecial);
-                AddField("Stage:", CmbStage);
-                AddField("Special Key:", TxtSpecialKey);
-                AddField("Index:", NumIndex);
-                AddField("Time:", NumTime);
-                AddField("Version:", NumVersion);
-                AddField("Energy:", NumEnergy);
-                AddField("Attribute:", CmbAttribute);
-                AddField("Sleeps:", TxtSleeps);
-                AddField("ATK Main:", CmbAtkMain);
-                AddField("Wakes:", TxtWakes);
-                AddField("ATK Alt:", CmbAtkAlt);
-                AddField("Power:", NumPower);
-                AddField("Crit Attack:", CmbAtkAlt2);
-                AddField("HP:", NumHp);
-                AddField("Hunger Loss:", NumHungerLoss);
-                AddField("Stomach:", NumStomach);
-                AddField("Strength Loss:", NumStrengthLoss);
-                AddField("Min Weight:", NumMinWeight);
-                AddField("Poop Timer:", NumPoopTimer);
-                AddField("Evol Weight:", NumEvolWeight);
-                AddField("Condition Hearts:", NumConditionHearts);
-                AddField("Heal Doses:", NumHealDoses);
-                AddField("Jogress Available:", ChkJogress);
-                AddField("Star:", NumStar);
+                AddField("Name:", TxtName,
+                    "The pet\u2019s name, and the key everything else joins on - evolution targets, battle enemies and friend encounters all name it exactly. It also builds the sprite folder through the module\u2019s Sprite Name Format.");
+                AddField("Special:", ChkSpecial,
+                    "Marks the pet as gated behind an unlock. With Special Key it means \"nothing can evolve into this, and no egg can hatch it, until that unlock is held\" - which is how \"clear area N to unlock X\" is modelled. One clear is enough, forever.");
+                AddField("Stage:", CmbStage,
+                    "0 Egg, 1 Baby I, 2 Baby II, 3 Child, 4 Adult, 5 Perfect, 6 Ultimate, 7 Super Ultimate, 8 Super Ultimate+. A stage-0 Digitama only animates frames 0-2, so the full frame table does not apply to it.");
+                AddField("Special Key:", TxtSpecialKey,
+                    "Name of the unlock that must be held before this pet can be evolved into or hatched. It has to match an unlock declared on the Unlocks tab exactly. For an area clear the convention is area_<area>_ver_<version> (VB and VH keep the older area_<area>_<version>), with this pet\u2019s own version.");
+                AddField("Index:", NumIndex,
+                    "The pet\u2019s id on the original device or DIM card, used to keep the roster in the order the hardware lists it. Eggs are -1.");
+                AddField("Time:", NumTime,
+                    "Evolution timer in MINUTES - the engine compares it against minutes elapsed, not hours. The pet becomes eligible to evolve once this much time has passed and an evolution route\u2019s requirements are met.");
+                AddField("Version:", NumVersion,
+                    "The gameplay line this pet belongs to: which evolutions and unlocks apply. This is not the hardware revision - that is device_version on the Devices tab, and it is what battle protocols and connection requirements key off.");
+                AddField("Energy:", NumEnergy,
+                    "Maximum DP. DP is spent on battles and training and refilled by Protein.");
+                AddField("Attribute:", CmbAttribute,
+                    "Battle attribute advantage: Vaccine beats Virus beats Data beats Vaccine. Free neither gains nor suffers. The module’s Battle Attribute Advantage is added to the hit rate, or to Power with \"as Power\".");
+                AddField("DigiSoul:", CmbDigisoul,
+                    "Native DigiSoul family used by Digivice iC devices. Leave empty when the Digimon has no assigned DigiSoul family.");
+            AddField("Personality:", CmbPersonality,
+                "The DIM card\u2019s activityType (Stoic, Active, Normal, Indoor, Lazy; Normal when the device has none), kept for the round the Vital Bracelet\u2019s special move fires on. Stored only: the game does not read it yet.");
+                AddField("Tags:", TxtTags,
+                    "Comma-separated labels an evolution can count defeats of (its Defeat Tag), in the adventure and in versus battles. The PENGZ marks its G-Monsters - the species Metal Garurumon must defeat ten of - with G-Monster.");
+                AddField("Sleeps:", TxtSleeps,
+                    "Time the pet goes to sleep. It gets drowsy and stops responding, and hunger and strength stop draining while it sleeps.");
+                AddField("ATK Main:", CmbAtkMain,
+                    "The pet\u2019s regular attack sprite. Stored one HIGHER than the device/firmware id, because 0 is reserved for \"no attack sprite\" - a firmware value of 19 is stored here as 20.");
+                AddField("Wakes:", TxtWakes,
+                    "Time the pet wakes up and can be interacted with normally again.");
+                AddField("ATK Alt:", CmbAtkAlt,
+                    "The alternate (big) attack sprite, drawn from the second sprite bank. Same +1 offset as ATK Main.");
+                AddField("Power:", NumPower,
+                    "Base battle power. Anything above this comes from the module\u2019s Power Bonus Rule - full Strength hearts, stars, level, or a Traited Egg.");
+                AddField("RPM:", NumRpm,
+                    "The shake rate this Digimon\u2019s charge asks for, on the RPM minigame (Digivice iC). Hitting it exactly throws the Hyper x5 attack row - faster is NOT better. The rates on record run 50 to 85, rising with stage. Leave at 0 on every other minigame: 0 means \"not stated\", and the charge then falls back to a stage/attribute table.");
+                AddField("Crit Attack:", CmbAtkAlt2,
+                    "Sprite used for the critical attack, on modules that enable one. Same +1 offset as the other two.");
+                AddField("HP:", NumHp,
+                    "Hit points - how much damage the pet absorbs in a battle before losing. On a device that tracks Vital Values a full bar adds up to +6 on top of this.");
+                AddField("Injury Prob.:", NumInjuryProbability,
+                    "Base percentage chance, from 0 to 100, that this Digimon is injured after losing a battle.");
+                AddField("Encounter Time:", NumEncounterTimeGroup,
+                    "Scheduled encounters (the Godzilla devices): the group of the Quests/Events Schedule whose times this Digimon’s encounters come at. -1 for none.");
+                AddField("Encounter Opp.:", NumEncounterOpponentGroup,
+                    "Scheduled encounters: which pool of a scheduled pooled-encounter event this Digimon meets its opponents from, in turn. -1 for none.");
+                AddField("Battle Chances:", TxtEncounterChances,
+                    "The Vital Bracelet’s random battle (a Card battle event): this character’s chance in percent of being met by a pet of its version at stage 1-4, 5-7 and 8, as \"10/5/5\" (the card’s three battle pools; \"-\" for none). Each version’s chances should add up to 100 per stage group. Blank for a Digimon not on a card.");
+                AddField("Hunger Loss:", NumHungerLoss,
+                    "Minutes between losing one hunger heart. HIGHER is slower, so a bigger number is an easier pet to keep. Does not tick while the pet sleeps.");
+                AddField("Stomach:", NumStomach,
+                    "How many hunger hearts the pet has. Feeding past full counts as overfeeding. Eggs cannot eat, so a stage-0 pet is set to 0 automatically.");
+                AddField("Strength Loss:", NumStrengthLoss,
+                    "Minutes between losing one strength heart. HIGHER is slower. Does not tick while the pet sleeps.");
+                AddField("Min Weight:", NumMinWeight,
+                    "The lightest this pet can get. Eggs belong at 0 - a 99 here is usually the importer\u2019s default rather than a rule, except on DMH, where every pet is 99 because the device ignores weight.");
+                AddField("Poop Timer:", NumPoopTimer,
+                    "Minutes between poops. Leaving poop uncleaned earns care mistakes.");
+                AddField("Evol Weight:", NumEvolWeight,
+                    "Weight the pet starts at immediately after evolving into this form.");
+                AddField("Condition Hearts:", NumConditionHearts,
+                    "How many condition hearts this pet has - the care meter, filled by good care and drained by care mistakes. Evolution routes can require a range of it.");
+                AddField("Heal Doses:", NumHealDoses,
+                    "Doses of medicine needed to cure a sickness or an injury. 0: this form cannot fall sick or be injured.");
+                AddField("Jogress Available:", ChkJogress,
+                    "Stored in the module but NOT read by the game - it gates nothing. Whether a pet can jogress is decided entirely by the jogress routes on its Evolutions.");
+                AddField("Availability:", CmbAvailability,
+                    "Normal is an ordinary pet. Unobtainable keeps it out of the roster. Friend declares it a special encounter: beating it registers the friend, which DigiXros requirements then read.");
+                AddField("Star:", NumStar,
+                    "Vital Bracelet star rating. Under the Star power rule the pet\u2019s battle power is its base plus 16 per star.");
                 // VB-specific fields - Attack and Critical Turn in second column
-                AddField("Attack:", NumAttack);
-                AddField("Critical Turn:", NumCriticalTurn);
+                AddField("Attack:", NumAttack,
+                    "Vital Bracelet AP - the damage landed on a won round. The pet\u2019s personality round adds +2 to it.");
+                AddField("Critical Turn:", NumCriticalTurn,
+                    "Round the critical hit lands on. VBE\u2019s values were generated randomly at import, so they cannot be checked against a card.");
 
                 // Save and Cancel buttons
                 btnSave = new Button { Text = "Save", Width = 80, Margin = new Padding(8, 8, 8, 8) };

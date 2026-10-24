@@ -40,6 +40,15 @@ namespace OmnipetModuleEditor.Utils
                         if (root.TryGetProperty("monster", out var monstersElement))
                         {
                             pets = JsonSerializer.Deserialize<List<Pet>>(monstersElement.GetRawText());
+                            // Bring routes written in the old jogress format
+                            // up to the current one, so everything downstream
+                            // (and the next save) sees a single shape.
+                            foreach (var p in pets ?? new List<Pet>())
+                                foreach (var e in p.Evolve ?? new List<Evolution>())
+                                {
+                                    e.NormalizeJogress();
+                                    e.NormalizeItem();
+                                }
                         }
                     }
                 }
@@ -89,42 +98,15 @@ namespace OmnipetModuleEditor.Utils
             });
         }
 
+        /// <summary>A deep copy of every field the model saves (personality,
+        /// tags, rpm, availability, encounter fields, temporary evolutions...),
+        /// through the model's own JSON, so a pasted pet shares no route with
+        /// the one it was copied from. The old field-by-field copy missed
+        /// those and shared the evolve routes.</summary>
         public static Pet ClonePet(Pet pet)
         {
             if (pet == null) return null;
-            return new Pet
-            {
-                Name = pet.Name,
-                Stage = pet.Stage,
-                Index = pet.Index,  // Clone Index field
-                Version = pet.Version,
-                Special = pet.Special,
-                SpecialKey = pet.SpecialKey,
-                Sleeps = pet.Sleeps,
-                Wakes = pet.Wakes,
-                AtkMain = pet.AtkMain,
-                AtkAlt = pet.AtkAlt,
-                AtkAlt2 = pet.AtkAlt2,
-                Time = pet.Time,
-                PoopTimer = pet.PoopTimer,
-                Energy = pet.Energy,
-                MinWeight = pet.MinWeight,
-                EvolWeight = pet.EvolWeight,
-                Stomach = pet.Stomach,
-                HungerLoss = pet.HungerLoss,
-                StrengthLoss = pet.StrengthLoss,
-                HealDoses = pet.HealDoses,
-                Power = pet.Power,
-                Attribute = pet.Attribute,
-                ConditionHearts = pet.ConditionHearts,
-                JogressAvaliable = pet.JogressAvaliable,
-                Hp = pet.Hp,
-                // VB-specific fields - NEW
-                Star = pet.Star,
-                Attack = pet.Attack,
-                CriticalTurn = pet.CriticalTurn,
-                Evolve = pet.Evolve != null ? new List<Evolution>(pet.Evolve) : null
-            };
+            return JsonSerializer.Deserialize<Pet>(JsonSerializer.Serialize(pet));
         }
 
         /// <summary>

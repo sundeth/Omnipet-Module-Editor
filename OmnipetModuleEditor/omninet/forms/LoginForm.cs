@@ -167,9 +167,39 @@ namespace OmnipetModuleEditor.OmniNet
                     }
                     else
                     {
-                        System.Diagnostics.Debug.WriteLine($"[LoginForm] Login failed - ErrorMessage: {response.ErrorMessage}");
-                        lblError.Text = response.ErrorMessage ?? response.Data?.message ?? "Login failed.";
-                        SetLoading(false);
+                        var errMsg = response.ErrorMessage ?? response.Data?.message ?? "Login failed.";
+                        System.Diagnostics.Debug.WriteLine($"[LoginForm] Login failed - ErrorMessage: {errMsg}");
+
+                        if (IsInactiveAccountError(errMsg))
+                        {
+                            // The account exists but was never activated — the
+                            // server blocks login until the emailed code is
+                            // verified.  Rather than dead-ending the user (whose
+                            // only recourse was re-registering), send a fresh
+                            // activation code and open the registration-verify
+                            // dialog so they can finish activating.
+                            System.Diagnostics.Debug.WriteLine("[LoginForm] Inactive account; resending activation code");
+                            await client.ResendVerificationCodeAsync(txtEmail.Text);
+
+                            using (var verifyForm = new VerifyCodeForm(txtEmail.Text, "", false))
+                            {
+                                var result = verifyForm.ShowDialog(this);
+                                if (result == DialogResult.OK)
+                                {
+                                    this.DialogResult = DialogResult.OK;
+                                    this.Close();
+                                }
+                                else
+                                {
+                                    SetLoading(false);
+                                }
+                            }
+                        }
+                        else
+                        {
+                            lblError.Text = errMsg;
+                            SetLoading(false);
+                        }
                     }
                 }
             }
@@ -179,6 +209,19 @@ namespace OmnipetModuleEditor.OmniNet
                 lblError.Text = $"Error: {ex.Message}";
                 SetLoading(false);
             }
+        }
+
+        /// <summary>
+        /// True when a login failure is due to an account that exists but
+        /// has not yet been activated/verified.
+        /// </summary>
+        private static bool IsInactiveAccountError(string message)
+        {
+            if (string.IsNullOrEmpty(message))
+                return false;
+            var msg = message.ToLowerInvariant();
+            return msg.Contains("not active") || msg.Contains("not activated")
+                || msg.Contains("not verified");
         }
 
         private void SetLoading(bool loading)

@@ -291,6 +291,11 @@ namespace OmnipetModuleEditor.OmniNet
                         fileContent.Headers.ContentType = MediaTypeHeaderValue.Parse("application/zip");
                         content.Add(fileContent, "file", Path.GetFileName(modulePath) + ".zip");
 
+                        // Integrity check: send a SHA-256 of the exact bytes we
+                        // upload so the server can reject a corrupted transfer
+                        // before it ever gets published to players.
+                        content.Add(new StringContent(ComputeSha256(fileBytes)), "sha256");
+
                         // Add authentication header
                         _httpClient.DefaultRequestHeaders.TryAddWithoutValidation("X-Device-Key", secretKey);
 
@@ -329,6 +334,134 @@ namespace OmnipetModuleEditor.OmniNet
                     Success = false,
                     ErrorMessage = ex.Message
                 };
+            }
+        }
+
+        /// <summary>
+        /// List published modules (public endpoint, no login required).
+        /// Follows pagination and returns the full list.
+        /// </summary>
+        public async Task<ApiResponse<List<ModuleListItem>>> ListAllModulesAsync()
+        {
+            try
+            {
+                var all = new List<ModuleListItem>();
+                int page = 1;
+                const int pageSize = 100;
+                while (true)
+                {
+                    var response = await _httpClient.GetAsync(
+                        $"{BaseUrl}/api/v1/modules?page={page}&page_size={pageSize}");
+                    var json = await response.Content.ReadAsStringAsync();
+
+                    if (!response.IsSuccessStatusCode)
+                    {
+                        var error = JsonSerializer.Deserialize<ErrorResponse>(json);
+                        return new ApiResponse<List<ModuleListItem>>
+                        {
+                            Success = false,
+                            ErrorMessage = error?.GetDetail() ?? $"Server returned {response.StatusCode}"
+                        };
+                    }
+
+                    var pageData = JsonSerializer.Deserialize<ModuleListPage>(json);
+                    if (pageData?.items != null)
+                        all.AddRange(pageData.items);
+
+                    if (pageData == null || page >= pageData.total_pages)
+                        break;
+                    page++;
+                }
+                return new ApiResponse<List<ModuleListItem>> { Success = true, Data = all };
+            }
+            catch (Exception ex)
+            {
+                return new ApiResponse<List<ModuleListItem>>
+                {
+                    Success = false,
+                    ErrorMessage = ex.Message
+                };
+            }
+        }
+
+        /// <summary>
+        /// List modules owned by or contributed to by the logged-in user.
+        /// Used to derive the ownership column in the module browser.
+        /// </summary>
+        public async Task<ApiResponse<List<MyModuleItem>>> ListMyModulesAsync(string secretKey)
+        {
+            try
+            {
+                _httpClient.DefaultRequestHeaders.TryAddWithoutValidation("X-Device-Key", secretKey);
+                var response = await _httpClient.GetAsync($"{BaseUrl}/api/v1/modules/mine");
+                var json = await response.Content.ReadAsStringAsync();
+                _httpClient.DefaultRequestHeaders.Remove("X-Device-Key");
+
+                if (response.IsSuccessStatusCode)
+                {
+                    var result = JsonSerializer.Deserialize<List<MyModuleItem>>(json);
+                    return new ApiResponse<List<MyModuleItem>> { Success = true, Data = result };
+                }
+                var error = JsonSerializer.Deserialize<ErrorResponse>(json);
+                return new ApiResponse<List<MyModuleItem>>
+                {
+                    Success = false,
+                    ErrorMessage = error?.GetDetail() ?? $"Server returned {response.StatusCode}"
+                };
+            }
+            catch (Exception ex)
+            {
+                _httpClient.DefaultRequestHeaders.Remove("X-Device-Key");
+                return new ApiResponse<List<MyModuleItem>>
+                {
+                    Success = false,
+                    ErrorMessage = ex.Message
+                };
+            }
+        }
+
+        /// <summary>
+        /// Download a module's zip bytes (public endpoint, no login required).
+        /// </summary>
+        public async Task<ApiResponse<byte[]>> DownloadModuleZipAsync(string moduleId)
+        {
+            try
+            {
+                var response = await _httpClient.GetAsync(
+                    $"{BaseUrl}/api/v1/modules/{moduleId}/download");
+                if (!response.IsSuccessStatusCode)
+                {
+                    return new ApiResponse<byte[]>
+                    {
+                        Success = false,
+                        ErrorMessage = $"Server returned {response.StatusCode}"
+                    };
+                }
+                var bytes = await response.Content.ReadAsByteArrayAsync();
+                return new ApiResponse<byte[]> { Success = true, Data = bytes };
+            }
+            catch (Exception ex)
+            {
+                return new ApiResponse<byte[]>
+                {
+                    Success = false,
+                    ErrorMessage = ex.Message
+                };
+            }
+        }
+
+        /// <summary>
+        /// Compute the lowercase hex SHA-256 of the given bytes.
+        /// </summary>
+        private static string ComputeSha256(byte[] data)
+        {
+            using (var sha = System.Security.Cryptography.SHA256.Create())
+            {
+                var hash = sha.ComputeHash(data);
+                var sb = new StringBuilder(hash.Length * 2);
+                foreach (var b in hash)
+                    sb.Append(b.ToString("x2"));
+                return sb.ToString();
             }
         }
 
@@ -695,6 +828,40 @@ namespace OmnipetModuleEditor.OmniNet
         public string nickname { get; set; }
         public bool can_publish { get; set; }
         public string added_at { get; set; }
+    }
+
+    /// <summary>One entry of the public GET /api/v1/modules listing.</summary>
+    public class ModuleListItem
+    {
+        public string id { get; set; }
+        public string name { get; set; }
+        public string version { get; set; }
+        public string description { get; set; }
+        public string category_name { get; set; }
+        public string status { get; set; }
+        public string owner_nickname { get; set; }
+        public int download_count { get; set; }
+        public string updated_at { get; set; }
+    }
+
+    /// <summary>Paginated wrapper returned by GET /api/v1/modules.</summary>
+    public class ModuleListPage
+    {
+        public List<ModuleListItem> items { get; set; }
+        public int total { get; set; }
+        public int page { get; set; }
+        public int page_size { get; set; }
+        public int total_pages { get; set; }
+    }
+
+    /// <summary>One entry of GET /api/v1/modules/mine (owned or contributed).</summary>
+    public class MyModuleItem
+    {
+        public string id { get; set; }
+        public string name { get; set; }
+        public string version { get; set; }
+        public string owner_nickname { get; set; }
+        public string status { get; set; }
     }
 
     #endregion

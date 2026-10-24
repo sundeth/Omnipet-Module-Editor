@@ -79,6 +79,21 @@ namespace OmnipetModuleEditor
             // Carrega os inimigos em cada grid
             foreach (var g in areaGrids)
                 g.LoadEnemies(enemies);
+
+            // Enemies no grid can show - a version no pet with power has, an
+            // area or round below 1 - are kept as they are and saved back.
+            var shown = new HashSet<BattleEnemy>(areaGrids.SelectMany(g => g.ShownEnemies()), ReferenceComparer.Instance);
+            keptAside = enemies.Where(e => e != null && !shown.Contains(e)).ToList();
+        }
+
+        /// <summary>Enemies loaded but not on any grid, saved back unchanged.</summary>
+        private List<BattleEnemy> keptAside = new List<BattleEnemy>();
+
+        private sealed class ReferenceComparer : IEqualityComparer<BattleEnemy>
+        {
+            public static readonly ReferenceComparer Instance = new ReferenceComparer();
+            public bool Equals(BattleEnemy a, BattleEnemy b) => ReferenceEquals(a, b);
+            public int GetHashCode(BattleEnemy e) => System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(e);
         }
 
         /// <summary>
@@ -216,7 +231,7 @@ namespace OmnipetModuleEditor
         {
             cmbStages.Items.Clear();
             cmbStages.Items.Add("");
-            foreach (var n in Enum.GetNames(typeof(StageEnum)))
+            foreach (var n in Stages.Names)
                 cmbStages.Items.Add(n);
             cmbStages.SelectedIndex = 0;
             selectedStage = -1;
@@ -371,7 +386,7 @@ namespace OmnipetModuleEditor
         /// </summary>
         private void SaveEnemiesFromGrids()
         {
-            enemies = areaGrids.SelectMany(g => g.GetAllBattleEnemies()).ToList();
+            enemies = areaGrids.SelectMany(g => g.GetAllBattleEnemies()).Concat(keptAside).ToList();
             EnemiesSaved?.Invoke(enemies);
         }
 
@@ -440,7 +455,10 @@ namespace OmnipetModuleEditor
             public Panel Panel { get; }
             private readonly TableLayoutPanel grid;
             private readonly List<int> versions;
-            private readonly List<List<BattleEnemy>> enemiesByVersion;
+            // [version][round - 1] -> every enemy of that slot. The game takes
+            // several (a special slot meets one at random, game_module
+            // get_enemies), so a slot is a list and the grid shows its first.
+            private readonly List<List<List<BattleEnemy>>> slots;
             private readonly Module module;
             private readonly string modulePath;
             private List<string> itemList;
@@ -450,6 +468,15 @@ namespace OmnipetModuleEditor
             private int columnCount = 1;
             private List<TextBox> unlockBoxes = new List<TextBox>();
             private List<ComboBox> itemCombos = new List<ComboBox>();
+            // What each round's boxes showed when loaded, and whether the
+            // round's enemies disagreed (a box then shows empty). A box is
+            // written to the round's enemies only when it was changed, so
+            // one version's prize never overwrites another's.
+            private readonly List<string> loadedUnlock = new List<string>();
+            private readonly List<string> loadedPrize = new List<string>();
+            private readonly List<bool> mixedUnlock = new List<bool>();
+            private readonly List<bool> mixedPrize = new List<bool>();
+            private readonly ToolTip boxTips = new ToolTip();
 
             public AreaGrid(List<int> versions, Module module, string modulePath, List<string> items, int areaIdx, bool specialEncounterMode = false)
             {
@@ -459,7 +486,7 @@ namespace OmnipetModuleEditor
                 this.itemList = items ?? new List<string>();
                 areaIndex = areaIdx;
                 this.specialEncounterMode = specialEncounterMode;
-                enemiesByVersion = versions.Select(_ => new List<BattleEnemy>()).ToList();
+                slots = versions.Select(_ => new List<List<BattleEnemy>> { new List<BattleEnemy>() }).ToList();
 
                 Panel = new Panel { Dock = DockStyle.Fill, AutoScroll = true };
 
@@ -491,6 +518,10 @@ namespace OmnipetModuleEditor
             {
                 unlockBoxes.Clear();
                 itemCombos.Clear();
+                loadedUnlock.Clear();
+                loadedPrize.Clear();
+                mixedUnlock.Clear();
+                mixedPrize.Clear();
 
                 for (int c = 0; c < columnCount; c++)
                 {
@@ -517,7 +548,16 @@ namespace OmnipetModuleEditor
 
                     unlockBoxes.Add(unlockBox);
                     itemCombos.Add(itemCombo);
+                    NoteNewRoundBoxes();
                 }
+            }
+
+            private void NoteNewRoundBoxes()
+            {
+                loadedUnlock.Add("");
+                loadedPrize.Add("");
+                mixedUnlock.Add(false);
+                mixedPrize.Add(false);
             }
 
             private void ExpandUnlockRow()
@@ -547,6 +587,7 @@ namespace OmnipetModuleEditor
 
                     unlockBoxes.Add(unlockBox);
                     itemCombos.Add(itemCombo);
+                    NoteNewRoundBoxes();
                 }
             }
 
@@ -557,33 +598,52 @@ namespace OmnipetModuleEditor
                 grid.Controls.Add(MakeHeaderLabel($"Round {columnCount}"), columnCount - 1, 0);
                 for (int r = 1; r <= versions.Count; r++)
                     grid.Controls.Add(new Panel { Size = new Size(140, 40) }, columnCount - 1, r);
+                foreach (var row in slots)
+                    while (row.Count < columnCount) row.Add(new List<BattleEnemy>());
                 ExpandUnlockRow();
             }
 
-            private void PlaceEnemy(BattleEnemy e, int vIdx, int col)
+            /// <summary>Every enemy on this grid, in version, round, slot order.</summary>
+            public IEnumerable<BattleEnemy> ShownEnemies() =>
+                slots.SelectMany(row => row.SelectMany(slot => slot));
+
+            private void PlaceEnemy(int vIdx, int col)
             {
                 var cell = grid.GetControlFromPosition(col, vIdx + 1);
                 if (cell != null) grid.Controls.Remove(cell);
 
+                var list = slots[vIdx][col];
+                if (list.Count == 0)
+                {
+                    grid.Controls.Add(new Panel { Size = new Size(140, 40) }, col, vIdx + 1);
+                    return;
+                }
+                var e = list[0];
                 var slot = new Panel { Size = new Size(140, 40), BackColor = Color.LightYellow, BorderStyle = BorderStyle.FixedSingle };
                 var pb = new PictureBox { Location = new Point(2, 2), Size = new Size(30, 30), SizeMode = PictureBoxSizeMode.Zoom };
                 LoadSprite(pb, e.Name);
+                // A slot holding more than one enemy (a special slot the game
+                // meets one of at random) says how many more it has.
+                string more = list.Count > 1 ? $" (+{list.Count - 1})" : "";
                 var info = new Label
                 {
-                    Text = $"{e.Name}\nS:{e.Stage} V:{e.Version}\nP:{e.Power}",
+                    Text = $"{e.Name}{more}\nS:{e.Stage} V:{e.Version}\nP:{e.Power}",
                     Location = new Point(34, 0),
                     AutoSize = true,
                     Font = new Font(FontFamily.GenericSansSerif, 7)
                 };
                 slot.Controls.AddRange(new Control[] { pb, info });
+                if (list.Count > 1)
+                    boxTips.SetToolTip(info, string.Join("\n", list.Select(x => x.Name)) + "\nRight-click removes the first.");
 
-                slot.MouseUp += (s, ev) =>
+                MouseEventHandler remove = (s, ev) =>
                 {
                     if (ev.Button == MouseButtons.Right)
-                    {
                         RemoveEnemyAndShiftLeft(vIdx, col);
-                    }
                 };
+                slot.MouseUp += remove;
+                info.MouseUp += remove;
+                pb.MouseUp += remove;
 
                 grid.Controls.Add(slot, col, vIdx + 1);
             }
@@ -618,30 +678,43 @@ namespace OmnipetModuleEditor
             /// </summary>
             public void LoadEnemies(List<BattleEnemy> all)
             {
-                for (int v = 0; v < enemiesByVersion.Count; v++) enemiesByVersion[v].Clear();
-                foreach (var be in all.Where(b => b.Area == areaIndex))
+                foreach (var row in slots)
+                    foreach (var slot in row) slot.Clear();
+                foreach (var be in all.Where(b => b != null && b.Area == areaIndex))
                 {
-                    int vIdx = versions.IndexOf(be.Version); if (vIdx < 0) continue;
-                    while (enemiesByVersion[vIdx].Count < be.Round) enemiesByVersion[vIdx].Add(null);
-                    if (be.Round > columnCount) while (columnCount < be.Round) AddColumn();
-                    enemiesByVersion[vIdx][be.Round - 1] = be;
+                    int vIdx = versions.IndexOf(be.Version);
+                    if (vIdx < 0 || be.Round < 1) continue; // kept aside by the form
+                    while (columnCount < be.Round) AddColumn();
+                    slots[vIdx][be.Round - 1].Add(be);
                 }
 
                 for (int v = 0; v < versions.Count; v++)
-                    for (int c = 0; c < enemiesByVersion[v].Count; c++)
-                        if (enemiesByVersion[v][c] != null) PlaceEnemy(enemiesByVersion[v][c], v, c);
+                    for (int c = 0; c < columnCount; c++)
+                        if (slots[v][c].Count > 0) PlaceEnemy(v, c);
 
-                // Preencher unlock/prize de cada round com o valor do primeiro inimigo daquele round
-                for (int c = 0; c < columnCount; c++)
+                // Each round's boxes show the value its enemies share; when
+                // they differ (a prize per version) the box shows empty and
+                // is only written if it is changed.
+                for (int c = 0; c < columnCount && c < unlockBoxes.Count; c++)
                 {
-                    var first = all.FirstOrDefault(e => e.Area == areaIndex && e.Round == c + 1);
-                    if (first != null)
-                    {
-                        if (unlockBoxes.Count > c)
-                            unlockBoxes[c].Text = first.Unlock ?? "";
-                        if (itemCombos.Count > c)
-                            itemCombos[c].SelectedItem = first.Prize ?? "";
-                    }
+                    var inRound = slots.SelectMany(row => row[c]).ToList();
+                    if (inRound.Count == 0) continue;
+                    var unlocks = inRound.Select(e => e.Unlock ?? "").Distinct().ToList();
+                    var prizes = inRound.Select(e => e.Prize ?? "").Distinct().ToList();
+
+                    mixedUnlock[c] = unlocks.Count > 1;
+                    loadedUnlock[c] = mixedUnlock[c] ? "" : unlocks[0];
+                    unlockBoxes[c].Text = loadedUnlock[c];
+                    if (mixedUnlock[c])
+                        boxTips.SetToolTip(unlockBoxes[c], "The round's enemies have different unlocks: " + string.Join(", ", unlocks.Select(u => u == "" ? "(none)" : u)) + ". Typing one here gives it to all of them.");
+
+                    mixedPrize[c] = prizes.Count > 1;
+                    loadedPrize[c] = mixedPrize[c] ? "" : prizes[0];
+                    if (loadedPrize[c] != "" && !itemCombos[c].Items.Contains(loadedPrize[c]))
+                        itemCombos[c].Items.Add(loadedPrize[c]);
+                    itemCombos[c].SelectedItem = loadedPrize[c];
+                    if (mixedPrize[c])
+                        boxTips.SetToolTip(itemCombos[c], "The round's enemies have different prizes: " + string.Join(", ", prizes.Select(p => p == "" ? "(none)" : p)) + ". Choosing one here gives it to all of them.");
                 }
             }
 
@@ -656,28 +729,32 @@ namespace OmnipetModuleEditor
                 {
                     string unlock = unlockBoxes.Count > c ? unlockBoxes[c].Text : "";
                     string prize = itemCombos.Count > c ? (itemCombos[c].SelectedItem as string ?? "") : "";
+                    bool unlockChanged = c < loadedUnlock.Count && unlock != loadedUnlock[c];
+                    bool prizeChanged = c < loadedPrize.Count && prize != loadedPrize[c];
+                    bool unlockShared = c < mixedUnlock.Count && !mixedUnlock[c];
+                    bool prizeShared = c < mixedPrize.Count && !mixedPrize[c];
 
-                    if (!string.IsNullOrEmpty(unlock) || !string.IsNullOrEmpty(prize))
+                    foreach (var be in slots.SelectMany(row => row[c]))
                     {
-                        for (int v = 0; v < versions.Count; v++)
-                        {
-                            if (enemiesByVersion[v].Count > c && enemiesByVersion[v][c] != null)
-                            {
-                                if (!string.IsNullOrEmpty(unlock))
-                                    enemiesByVersion[v][c].Unlock = unlock;
-                                if (!string.IsNullOrEmpty(prize))
-                                    enemiesByVersion[v][c].Prize = prize;
-                            }
-                        }
+                        // A changed box is the round's new value for every
+                        // version; an unchanged one only fills an enemy added
+                        // here, and leaves each loaded enemy its own.
+                        if (unlockChanged)
+                            be.Unlock = unlock == "" ? null : unlock;
+                        else if (unlockShared && unlock != "" && string.IsNullOrEmpty(be.Unlock))
+                            be.Unlock = unlock;
+                        if (prizeChanged)
+                            be.Prize = prize == "" ? null : prize;
+                        else if (prizeShared && prize != "" && string.IsNullOrEmpty(be.Prize))
+                            be.Prize = prize;
                     }
                 }
 
                 for (int v = 0; v < versions.Count; v++)
                 {
-                    for (int c = 0; c < enemiesByVersion[v].Count; c++)
+                    for (int c = 0; c < columnCount; c++)
                     {
-                        var be = enemiesByVersion[v][c];
-                        if (be != null && !string.IsNullOrWhiteSpace(be.Name))
+                        foreach (var be in slots[v][c])
                         {
                             be.Area = areaIndex;
                             be.Round = c + 1;
@@ -718,39 +795,41 @@ namespace OmnipetModuleEditor
                 int col;
                 if (specialEncounterMode)
                 {
-                    // Special encounters: always round 1, replace any existing entry
+                    // Special encounters: round 1. Added beside any enemy the
+                    // slot has (the game meets one of them at random);
+                    // right-click removes one.
                     col = 0;
                 }
                 else
                 {
-                    col = enemiesByVersion[vIdx].FindIndex(b => b == null);
-                    if (col == -1) col = enemiesByVersion[vIdx].Count;
-                    if (col == columnCount) AddColumn();
+                    col = slots[vIdx].FindIndex(s => s.Count == 0);
+                    if (col == -1)
+                    {
+                        AddColumn();
+                        col = columnCount - 1;
+                    }
                 }
 
-                while (enemiesByVersion[vIdx].Count <= col) enemiesByVersion[vIdx].Add(null);
-
                 var be = CreateBattleEnemyFromPet(pet, areaIndex, col + 1);
-                enemiesByVersion[vIdx][col] = be;
-                PlaceEnemy(be, vIdx, col);
+                slots[vIdx][col].Add(be);
+                PlaceEnemy(vIdx, col);
             }
 
             /// <summary>
-            /// Removes an enemy and shifts the row left.
+            /// Removes the slot's first enemy; a slot left empty closes up,
+            /// the row's later rounds shifting left.
             /// </summary>
             private void RemoveEnemyAndShiftLeft(int vIdx, int col)
             {
-                if (vIdx < 0 || vIdx >= enemiesByVersion.Count) return;
-                if (col < 0 || col >= enemiesByVersion[vIdx].Count) return;
+                if (vIdx < 0 || vIdx >= slots.Count) return;
+                if (col < 0 || col >= slots[vIdx].Count || slots[vIdx][col].Count == 0) return;
 
-                enemiesByVersion[vIdx][col] = null;
-
-                for (int c = col + 1; c < enemiesByVersion[vIdx].Count; c++)
+                slots[vIdx][col].RemoveAt(0);
+                if (slots[vIdx][col].Count == 0)
                 {
-                    enemiesByVersion[vIdx][c - 1] = enemiesByVersion[vIdx][c];
+                    slots[vIdx].RemoveAt(col);
+                    slots[vIdx].Add(new List<BattleEnemy>());
                 }
-                if (enemiesByVersion[vIdx].Count > 0)
-                    enemiesByVersion[vIdx][enemiesByVersion[vIdx].Count - 1] = null;
 
                 RedrawEnemiesRow(vIdx);
             }
@@ -761,16 +840,7 @@ namespace OmnipetModuleEditor
             private void RedrawEnemiesRow(int vIdx)
             {
                 for (int c = 0; c < columnCount; c++)
-                {
-                    var cell = grid.GetControlFromPosition(c, vIdx + 1);
-                    if (cell != null) grid.Controls.Remove(cell);
-                }
-                for (int c = 0; c < enemiesByVersion[vIdx].Count; c++)
-                {
-                    var be = enemiesByVersion[vIdx][c];
-                    if (be != null)
-                        PlaceEnemy(be, vIdx, c);
-                }
+                    PlaceEnemy(vIdx, c);
             }
         }
 
